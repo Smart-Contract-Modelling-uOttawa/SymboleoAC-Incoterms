@@ -1,0 +1,88 @@
+Domain fasDomain
+  // FAS - Free Alongside Ship (Incoterms 2020), named port of shipment.
+  // Seller bears cost and risk up to the moment the goods are placed alongside
+  // the vessel nominated by the buyer; risk then passes to the buyer.
+  Seller isA Role with name: String, org: String;
+  Buyer isA Role with name: String, org: String;
+  Currency isAn Enumeration(CAD, USD, EUR);
+  // The goods sold; owner defaults to the seller until delivery.
+  Goods isAn Asset with description: String, quantity: Number, owner: Seller;
+  // Buyer nominates the vessel and gives notice (name, loading point, deadline).
+  VesselNominated isAn Event with Env vesselName: String, Env loadingPort: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  // Seller clears the goods for export.
+  ExportCleared isAn Event with performer: Seller, controller: Seller;
+  // Delivery: seller places the goods alongside the nominated vessel (risk passes).
+  DeliveredAlongside isAn Event with port: String, Env alongsideDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // Seller hands the buyer the usual proof that the goods were delivered alongside.
+  DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // Buyer takes delivery of the goods.
+  GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Buyer pays the price.
+  Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
+endDomain
+
+Contract FAS (
+  sellerP: Seller, buyerP: Buyer,
+  goodsDesc: String, qty: Number, price: Number, curr: Currency,
+  portOfShipment: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number
+)
+
+Declarations
+  seller: Seller with name := sellerP.name, org := sellerP.org;
+  buyer: Buyer with name := buyerP.name, org := buyerP.org;
+  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
+  vesselNominated: VesselNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
+  exportCleared: ExportCleared with performer := seller, controller := seller;
+  deliveredAlongside: DeliveredAlongside with port := portOfShipment, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  documentsProvided: DocumentsProvided with performer := seller, controller := seller;
+  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
+
+Preconditions
+  goods.quantity > 0;
+
+Obligations
+  // A7: the seller clears the goods for export before they are placed alongside.
+  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, deliveredAlongside));
+  // A2 delivery: once the buyer has nominated the vessel, the seller must place
+  // the goods alongside it, at the named loading point, before the deadline.
+  oDeliver: Happens(vesselNominated) -> O(seller, buyer, true,
+              WhappensBefore(deliveredAlongside, deliveredAlongside.delDueDate)
+              and deliveredAlongside.port == vesselNominated.loadingPort);
+  // A6: after delivery alongside, the seller provides the buyer with the usual
+  // proof that the goods were delivered alongside the vessel.
+  oProvideDocuments: Happens(deliveredAlongside) -> O(seller, buyer, true,
+              Happens(documentsProvided));
+  // B7/B10: the buyer nominates the vessel and gives sufficient notice in time.
+  oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));
+  // B2: the buyer takes delivery of the goods once they are alongside.
+  oTakeDelivery: Happens(deliveredAlongside) -> O(buyer, seller, true, Happens(goodsTakenOver));
+
+Surviving Obligations
+  // B1: the buyer must pay the price for goods delivered alongside and evidenced
+  // by the usual proof of delivery; this survives termination of the contract.
+  oPay: (Happens(deliveredAlongside) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
+              WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+
+Powers
+  // If the buyer fails to nominate the vessel in time, the seller may suspend delivery.
+  pSuspendDelivery: Happens(Violated(obligations.oNominateVessel)) ->
+              P(seller, buyer, true, Suspended(obligations.oDeliver)) with Controller seller;
+  // A late nomination during the suspension resumes the delivery obligation.
+  pResumeDelivery: HappensWithin(vesselNominated, Suspension(obligations.oDeliver)) ->
+              P(buyer, seller, true, Resumed(obligations.oDeliver));
+  // If the seller fails to deliver alongside, the buyer may terminate the contract.
+  pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));
+  // If the buyer fails to take delivery, the seller may terminate the contract.
+  pTerminateBySeller: Happens(Violated(obligations.oTakeDelivery)) -> P(seller, buyer, true, Terminated(self));
+
+ACPolicy with Controller seller
+  Rule1: Grant read To buyer On goods.description by seller;
+  Rule2: Grant read To buyer On obligations.oDeliver by seller;
+  Rule3: Grant read To buyer On deliveredAlongside by seller;
+  Rule4: Grant write To buyer On powers.pTerminateByBuyer by seller;
+
+Constraints
+  not(IsEqual(buyer, seller));
+
+endContract

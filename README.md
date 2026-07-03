@@ -17,7 +17,11 @@ This backs a paper on the extent to which SymboleoAC supports a real, widely-use
 | Rule | Spec | Compiles | Scenarios |
 |------|------|:--------:|:---------:|
 | FOB — Free on Board | [specs/FOB.symboleo](specs/FOB.symboleo) | ✅ | ⬜ |
-| EXW, FCA, CPT, CIP, DAP, DPU, DDP, FAS, CFR, CIF | — | ⬜ | ⬜ |
+| FAS — Free Alongside Ship | [specs/FAS.symboleo](specs/FAS.symboleo) | ✅ | ⬜ |
+| EXW, FCA, CPT, CIP, DAP, DPU, DDP, CFR, CIF | — | ⬜ | ⬜ |
+
+Specs are generated (`python generator/generate.py`); CI enforces they never
+drift from the generator. See [generator/README.md](generator/README.md).
 
 ## Layout
 

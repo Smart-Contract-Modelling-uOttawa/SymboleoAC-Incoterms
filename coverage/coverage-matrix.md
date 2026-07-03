@@ -10,31 +10,31 @@ Columns are the 11 rules. Fill a column when its spec lands. FOB is seeded from
 
 | Art. | Obligation | Device in SymboleoAC | EXW | FCA | CPT | CIP | DAP | DPU | DDP | FAS | FOB | CFR | CIF |
 |------|-----------|----------------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| A1 | General obligations (goods + invoice conform) | precondition / asset attributes | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| A2 | Delivery (delivery point) | `oDeliver` obligation; delivery event | ? | ? | ? | ? | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
-| A3 | Transfer of risks | **no first-class risk**; via delivery trigger + surviving pay | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| A4 | Carriage | carriage event / obligation (seller side for C/D rules) | ? | ? | ? | ? | ? | ? | ? | — | — | ✅ | ✅ |
-| A5 | Insurance | seller insurance obligation (CIF/CIP); level = attribute only | ? | ? | ? | ✅? | ? | ? | ? | — | — | — | ◐ |
-| A6 | Delivery / transport document | `BillOfLading` asset + issuance event + `oProvideDocuments` | ? | ? | ? | ? | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
-| A7 | Export/import clearance | `oExportClearance` obligation | ? | ? | ? | ? | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
-| A8 | Checking / packaging / marking | asset attributes / constraints | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| A9 | Allocation of costs | **no cost algebra**; per-stage data / payment obligations | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| A10 | Notices | temporal predicates; "sufficient" lost | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| A1 | General obligations (goods + invoice conform) | precondition / asset attributes | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| A2 | Delivery (delivery point) | `oDeliver` obligation; delivery event | ? | ✅ | ✅ | ✅ | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
+| A3 | Transfer of risks | **no first-class risk**; via delivery trigger + surviving pay | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| A4 | Carriage | carriage event / obligation (seller side for C/D rules) | ? | — | ✅ | ✅ | ? | ? | ? | — | — | ✅ | ✅ |
+| A5 | Insurance | seller insurance obligation (CIF/CIP); level = attribute only | ? | — | — | ◐ | ? | ? | ? | — | — | — | ◐ |
+| A6 | Delivery / transport document | `BillOfLading` asset + issuance event + `oProvideDocuments` | ? | ✅ | ✅ | ✅ | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
+| A7 | Export/import clearance | `oExportClearance` obligation | ? | ✅ | ✅ | ✅ | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
+| A8 | Checking / packaging / marking | asset attributes / constraints | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| A9 | Allocation of costs | **no cost algebra**; per-stage data / payment obligations | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| A10 | Notices | temporal predicates; "sufficient" lost | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
 
 ## Buyer obligations (B1–B10)
 
 | Art. | Obligation | Device in SymboleoAC | EXW | FCA | CPT | CIP | DAP | DPU | DDP | FAS | FOB | CFR | CIF |
 |------|-----------|----------------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| B1 | General obligations (pay the price) | `oPay` (surviving) obligation | ? | ? | ? | ? | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
-| B2 | Taking delivery | `oTakeDelivery` obligation | ? | ? | ? | ? | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
-| B3 | Transfer of risks | see A3; buyer bears risk after delivery point | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| B4 | Carriage | buyer contracts carriage (F-rules) via nomination | ? | ? | ? | ? | ? | ? | ? | ✅ | ✅ | — | — |
-| B5 | Insurance | buyer insurance (or none) | ? | ? | ? | ? | ? | ? | ? | — | — | — | — |
-| B6 | Proof of delivery | accept documents; event | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| B7 | Export/import clearance | buyer import clearance obligation | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| B8 | Inspection of goods | inspection event / obligation | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| B9 | Allocation of costs | see A9 | ? | ? | ? | ? | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
-| B10 | Notices | vessel nomination + notice (`oNominateVessel`) | ? | ? | ? | ? | ? | ? | ? | ✅ | ✅ | ◐ | ◐ |
+| B1 | General obligations (pay the price) | `oPay` (surviving) obligation | ? | ✅ | ✅ | ✅ | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
+| B2 | Taking delivery | `oTakeDelivery` obligation | ? | ✅ | ✅ | ✅ | ? | ? | ? | ✅ | ✅ | ✅ | ✅ |
+| B3 | Transfer of risks | see A3; buyer bears risk after delivery point | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| B4 | Carriage | buyer contracts carriage (F-rules) via nomination | ? | ✅ | — | — | ? | ? | ? | ✅ | ✅ | — | — |
+| B5 | Insurance | buyer insurance (or none) | ? | — | — | — | ? | ? | ? | — | — | — | — |
+| B6 | Proof of delivery | accept documents; event | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| B7 | Export/import clearance | buyer import clearance obligation | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| B8 | Inspection of goods | inspection event / obligation | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| B9 | Allocation of costs | see A9 | ? | ◐ | ◐ | ◐ | ? | ? | ? | ◐ | ◐ | ◐ | ◐ |
+| B10 | Notices | vessel nomination + notice (`oNominateVessel`) | ? | ✅ | ◐ | ◐ | ? | ? | ? | ✅ | ✅ | ◐ | ◐ |
 
 ## Cross-cutting findings (running list)
 
@@ -69,3 +69,14 @@ Columns are the 11 rules. Fill a column when its spec lands. FOB is seeded from
   but the **cover level** (ICC (C), 110%) is only an `InsuranceObtained.coverLevel`
   data attribute — hence **◐**, not ✅: the level is recorded, not enforced as
   semantics.
+- **Sea vs any-mode** (FCA/CPT/CIP mirror FAS/CFR/CIF) — the family axis is
+  *orthogonal* to the F/C axis, so coverage patterns repeat across it: FCA has
+  the same column as the F-terms FAS/FOB, CPT the same as CFR, CIP the same as
+  CIF. Only the **vocabulary/device** changes — sea rules name a `vessel` /
+  `port` / on-board-or-alongside delivery and a **bill of lading**; any-mode
+  rules name a `carrier` / `place` / handover-to-the-(first-)carrier delivery
+  and a generic **transport document** (a proof-of-delivery `DocumentsProvided`
+  event, no `BillOfLading`). CIP raises insurance to **ICC (A)** vs CIF's ICC (C)
+  — a data-only difference (`insuranceCover`). This orthogonality is itself a
+  finding: SymboleoAC expresses the normative structure identically regardless of
+  transport mode; the mode shows up only as naming, never as different norms.

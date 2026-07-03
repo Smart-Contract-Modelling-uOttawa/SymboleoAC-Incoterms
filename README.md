@@ -20,7 +20,10 @@ This backs a paper on the extent to which SymboleoAC supports a real, widely-use
 | FAS — Free Alongside Ship | [specs/FAS.symboleo](specs/FAS.symboleo) | ✅ | ⬜ |
 | CFR — Cost and Freight | [specs/CFR.symboleo](specs/CFR.symboleo) | ✅ | ⬜ |
 | CIF — Cost, Insurance and Freight | [specs/CIF.symboleo](specs/CIF.symboleo) | ✅ | ⬜ |
-| EXW, FCA, CPT, CIP, DAP, DPU, DDP | — | ⬜ | ⬜ |
+| FCA — Free Carrier | [specs/FCA.symboleo](specs/FCA.symboleo) | ✅ | ⬜ |
+| CPT — Carriage Paid To | [specs/CPT.symboleo](specs/CPT.symboleo) | ✅ | ⬜ |
+| CIP — Carriage and Insurance Paid To | [specs/CIP.symboleo](specs/CIP.symboleo) | ✅ | ⬜ |
+| EXW, DAP, DPU, DDP | — | ⬜ | ⬜ |
 
 Specs are generated (`python generator/generate.py`); CI enforces they never
 drift from the generator. See [generator/README.md](generator/README.md).

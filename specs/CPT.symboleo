@@ -1,0 +1,87 @@
+Domain cptDomain
+  // CPT - Carriage Paid To (Incoterms 2020), named place of destination; any mode.
+  // Seller contracts carriage to destination and hands the goods to the first
+  // carrier; risk passes at that handover, while cost runs to the destination.
+  Seller isA Role with name: String, org: String;
+  Buyer isA Role with name: String, org: String;
+  Currency isAn Enumeration(CAD, USD, EUR);
+  // The goods sold; owner defaults to the seller until delivery.
+  Goods isAn Asset with description: String, quantity: Number, owner: Seller;
+  // Seller clears the goods for export.
+  ExportCleared isAn Event with performer: Seller, controller: Seller;
+  // Seller contracts carriage to the named destination (and pays the freight).
+  CarriageContracted isAn Event with destinationPlace: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
+  // Delivery: seller hands the goods to the first carrier it contracted (risk passes on handover).
+  HandedToFirstCarrier isAn Event with place: String, Env handoverDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // Seller tenders the buyer the usual transport document for the carriage.
+  DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // Buyer takes delivery of the goods.
+  GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Buyer pays the price.
+  Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
+endDomain
+
+Contract CPT (
+  sellerP: Seller, buyerP: Buyer,
+  goodsDesc: String, qty: Number, price: Number, curr: Currency,
+  placeOfDelivery: String, placeOfDestination: String, effDate: Date, carriageDays: Number, deliveryDays: Number, paymentDays: Number
+)
+
+Declarations
+  seller: Seller with name := sellerP.name, org := sellerP.org;
+  buyer: Buyer with name := buyerP.name, org := buyerP.org;
+  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
+  exportCleared: ExportCleared with performer := seller, controller := seller;
+  carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
+  handedToFirstCarrier: HandedToFirstCarrier with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  documentsProvided: DocumentsProvided with performer := seller, controller := seller;
+  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
+
+Preconditions
+  goods.quantity > 0;
+
+Obligations
+  // A7: the seller clears the goods for export before they are handed to the carrier.
+  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, handedToFirstCarrier));
+  // A4: the seller contracts carriage to the named destination, at its own cost, in time.
+  oContractCarriage: O(seller, buyer, true,
+              WhappensBefore(carriageContracted, carriageContracted.dueDate)
+              and carriageContracted.destinationPlace == placeOfDestination);
+  // A2 delivery: the seller hands the goods to the first carrier at the named
+  // place of delivery before the deadline; risk passes to the buyer on handover.
+  oDeliver: O(seller, buyer, true,
+              WhappensBefore(handedToFirstCarrier, handedToFirstCarrier.delDueDate)
+              and handedToFirstCarrier.place == placeOfDelivery);
+  // A6: the seller provides the buyer with the usual transport document for the
+  // carriage it has contracted to the destination.
+  oProvideDocuments: Happens(handedToFirstCarrier) -> O(seller, buyer, true,
+              Happens(documentsProvided));
+  // B2: the buyer takes delivery of the goods once they are with the carrier.
+  oTakeDelivery: Happens(handedToFirstCarrier) -> O(buyer, seller, true, Happens(goodsTakenOver));
+
+Surviving Obligations
+  // B1: the buyer must pay the price for goods delivered to the carrier and evidenced
+  // by the usual proof of delivery; this survives termination of the contract.
+  oPay: (Happens(handedToFirstCarrier) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
+              WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+
+Powers
+  // If the seller fails to contract carriage to the destination, the buyer may terminate.
+  pTerminateNoCarriage: Happens(Violated(obligations.oContractCarriage)) -> P(buyer, seller, true, Terminated(self));
+  // If the seller fails to deliver to the carrier, the buyer may terminate the contract.
+  pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));
+  // If the buyer fails to take delivery, the seller may terminate the contract.
+  pTerminateBySeller: Happens(Violated(obligations.oTakeDelivery)) -> P(seller, buyer, true, Terminated(self));
+
+ACPolicy with Controller seller
+  Rule1: Grant read To buyer On goods.description by seller;
+  Rule2: Grant read To buyer On obligations.oDeliver by seller;
+  Rule3: Grant read To buyer On carriageContracted by seller;
+  Rule4: Grant read To buyer On handedToFirstCarrier by seller;
+  Rule5: Grant write To buyer On powers.pTerminateByBuyer by seller;
+
+Constraints
+  not(IsEqual(buyer, seller));
+
+endContract

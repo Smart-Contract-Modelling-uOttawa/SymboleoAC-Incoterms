@@ -1,0 +1,105 @@
+Domain cifDomain
+  // CIF - Cost, Insurance and Freight (Incoterms 2020), named port of destination.
+  // Seller delivers on board and bears cost (freight + insurance) to the
+  // destination port; risk passes to the buyer when the goods are on board.
+  Seller isA Role with name: String, org: String;
+  Buyer isA Role with name: String, org: String;
+  // The carrier the seller contracts to carry the goods to the destination port; it issues the bill of lading.
+  Carrier isA Role thirdParty with name: String, org: String;
+  Currency isAn Enumeration(CAD, USD, EUR);
+  // The goods sold; owner defaults to the seller until delivery.
+  Goods isAn Asset with description: String, quantity: Number, owner: Seller;
+  // The bill of lading: the transport document evidencing shipment on board.
+  BillOfLading isAn Asset with blNumber: String, owner: Carrier;
+  // Seller clears the goods for export.
+  ExportCleared isAn Event with performer: Seller, controller: Seller;
+  // Seller contracts carriage to the named destination port (and pays the freight).
+  CarriageContracted isAn Event with destinationPort: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
+  // Seller takes out cargo insurance for the buyer's benefit (level recorded as data).
+  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, performer: Seller, controller: Seller;
+  // Delivery: seller places the goods on board the vessel (risk passes on board).
+  LoadedOnBoard isAn Event with port: String, Env onBoardDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // Carrier issues the bill of lading once the goods are on board.
+  BillOfLadingIssued isAn Event with Env blNumber: String, performer: Carrier, controller: Carrier;
+  // Seller tenders the buyer the bill of lading for the destination port.
+  DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // Buyer takes delivery of the goods.
+  GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Buyer pays the price.
+  Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
+endDomain
+
+Contract CIF (
+  sellerP: Seller, buyerP: Buyer, carrierP: Carrier,
+  goodsDesc: String, qty: Number, price: Number, curr: Currency,
+  portOfShipment: String, portOfDestination: String, effDate: Date, carriageDays: Number, deliveryDays: Number, paymentDays: Number, insuranceCover: String
+)
+
+Declarations
+  seller: Seller with name := sellerP.name, org := sellerP.org;
+  buyer: Buyer with name := buyerP.name, org := buyerP.org;
+  carrier: Carrier with name := carrierP.name, org := carrierP.org;
+  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
+  billOfLading: BillOfLading with blNumber := "", owner := carrier;
+  exportCleared: ExportCleared with performer := seller, controller := seller;
+  carriageContracted: CarriageContracted with destinationPort := portOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
+  insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;
+  loadedOnBoard: LoadedOnBoard with port := portOfShipment, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  billOfLadingIssued: BillOfLadingIssued with performer := carrier, controller := carrier;
+  documentsProvided: DocumentsProvided with performer := seller, controller := seller;
+  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
+
+Preconditions
+  goods.quantity > 0;
+
+Obligations
+  // A7: the seller clears the goods for export before they go on board.
+  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, loadedOnBoard));
+  // A4: the seller contracts carriage to the named destination port, at its own cost, in time.
+  oContractCarriage: O(seller, buyer, true,
+              WhappensBefore(carriageContracted, carriageContracted.dueDate)
+              and carriageContracted.destinationPort == portOfDestination);
+  // A5: the seller takes out cargo insurance (min. ICC (C), 110% of price) for the buyer.
+  oInsure: O(seller, buyer, true, ShappensBefore(insuranceObtained, loadedOnBoard));
+  // A2 delivery: the seller places the goods on board the vessel at the port of
+  // shipment before the deadline; risk passes to the buyer on board.
+  oDeliver: O(seller, buyer, true,
+              WhappensBefore(loadedOnBoard, loadedOnBoard.delDueDate)
+              and loadedOnBoard.port == portOfShipment);
+  // A6: after loading, the carrier issues the bill of lading and the seller
+  // tenders it to the buyer as the usual transport document.
+  oProvideDocuments: Happens(loadedOnBoard) -> O(seller, buyer, true,
+              Happens(billOfLadingIssued) and Happens(documentsProvided));
+  // B2: the buyer takes delivery of the goods once they are on board.
+  oTakeDelivery: Happens(loadedOnBoard) -> O(buyer, seller, true, Happens(goodsTakenOver));
+
+Surviving Obligations
+  // B1: the buyer must pay the price for goods delivered on board and evidenced
+  // by the bill of lading; this survives termination of the contract.
+  oPay: (Happens(loadedOnBoard) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
+              WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+
+Powers
+  // If the seller fails to contract carriage to the destination, the buyer may terminate.
+  pTerminateNoCarriage: Happens(Violated(obligations.oContractCarriage)) -> P(buyer, seller, true, Terminated(self));
+  // If the seller fails to insure the cargo, the buyer may terminate.
+  pTerminateNoInsurance: Happens(Violated(obligations.oInsure)) -> P(buyer, seller, true, Terminated(self));
+  // If the seller fails to deliver on board, the buyer may terminate the contract.
+  pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));
+  // If the buyer fails to take delivery, the seller may terminate the contract.
+  pTerminateBySeller: Happens(Violated(obligations.oTakeDelivery)) -> P(seller, buyer, true, Terminated(self));
+
+ACPolicy with Controller seller
+  Rule1: Grant read To buyer On goods.description by seller;
+  Rule2: Grant read To buyer On obligations.oDeliver by seller;
+  Rule3: Grant read To buyer On carriageContracted by seller;
+  Rule4: Grant read To buyer On insuranceObtained by seller;
+  Rule5: Grant read To seller On billOfLadingIssued by carrier;
+  Rule6: Grant write To carrier On billOfLading.blNumber by seller;
+  Rule7: Grant write To buyer On powers.pTerminateByBuyer by seller;
+
+Constraints
+  not(IsEqual(buyer, seller));
+
+endContract

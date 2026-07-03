@@ -18,7 +18,9 @@ This backs a paper on the extent to which SymboleoAC supports a real, widely-use
 |------|------|:--------:|:---------:|
 | FOB — Free on Board | [specs/FOB.symboleo](specs/FOB.symboleo) | ✅ | ⬜ |
 | FAS — Free Alongside Ship | [specs/FAS.symboleo](specs/FAS.symboleo) | ✅ | ⬜ |
-| EXW, FCA, CPT, CIP, DAP, DPU, DDP, CFR, CIF | — | ⬜ | ⬜ |
+| CFR — Cost and Freight | [specs/CFR.symboleo](specs/CFR.symboleo) | ✅ | ⬜ |
+| CIF — Cost, Insurance and Freight | [specs/CIF.symboleo](specs/CIF.symboleo) | ✅ | ⬜ |
+| EXW, FCA, CPT, CIP, DAP, DPU, DDP | — | ⬜ | ⬜ |
 
 Specs are generated (`python generator/generate.py`); CI enforces they never
 drift from the generator. See [generator/README.md](generator/README.md).

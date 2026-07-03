@@ -6,11 +6,14 @@ Reads the ICC allocation tables (``incoterms.data.yaml``) and emits one
 norm templates. The 11 specs are kept structurally parallel — they share the
 vocabulary and the template *shapes* — while each declares only the
 events/assets/norms that its Incoterms rule actually uses (faithful per-rule
-modelling). The varying tokens live in a small per-rule ``Profile``.
+modelling). The varying tokens live in a per-rule ``Profile``.
 
-Bootstrapping status: the emitter reproduces the golden ``specs/FOB.symboleo``
-byte-for-byte (content), then compiles clean. FAS is layered on as the second
-sea F-term. The remaining rules extend ``profile_for`` + the section emitters.
+Implemented so far — the sea family:
+  * F-terms (buyer contracts carriage + nominates the vessel): FOB, FAS.
+  * C-terms (seller contracts carriage to destination; risk still passes on
+    board at shipment; CIF adds seller insurance): CFR, CIF.
+FOB is reproduced byte-for-byte from the golden spec. The remaining rules extend
+``profile_for`` + the section emitters.
 
 Usage:
     python generator/generate.py [--only FOB[,FAS,...]] [--out specs] [--check]
@@ -38,7 +41,7 @@ DATA = REPO / "generator" / "incoterms.data.yaml"
 NL = "\n"
 
 # Which rules the emitters currently reproduce (grows as rules land).
-IMPLEMENTED = ["FAS", "FOB"]
+IMPLEMENTED = ["CFR", "CIF", "FAS", "FOB"]
 
 
 # --- rule configuration ------------------------------------------------------
@@ -48,21 +51,27 @@ IMPLEMENTED = ["FAS", "FOB"]
 class Profile:
     """The per-rule tokens the shared templates vary on (faithful modelling)."""
 
-    # Domain header comment (the 3 lines under `Domain <x>`).
-    domain_comment: list[str]
+    term_type: str               # "F" (buyer nominates) | "C" (seller carriage)
+    domain_comment: list[str]    # the lines under `Domain <x>`
     # Delivery event (where risk passes).
     delivery_event: str          # e.g. "LoadedOnBoard"
     delivery_var: str            # e.g. "loadedOnBoard"
     delivery_date_attr: str      # Env date attr, e.g. "onBoardDate"
     delivery_domain_comment: str
     documents_domain_comment: str
+    contract_params_tail: str    # the places/deadlines param line
     # Short phrases woven into the norm comments.
     point_phrase: str            # "on board" | "alongside"
     export_before_phrase: str    # "they go on board" | "they are placed alongside"
-    deliver_place_phrase: str    # "on board it" | "alongside it"
+    deliver_place_phrase: str    # F-terms: "on board it" | "alongside it"
+    provide_docs_line2: str      # 2nd comment line of the BoL document norm
     # Feature switches (approach A: declare only what the rule uses).
     has_carrier: bool
-    has_bol: bool                # carrier-issued bill of lading in the seller's doc norm
+    has_bol: bool                # carrier-issued bill of lading in the doc norm
+    has_vessel_nomination: bool  # F-terms
+    has_seller_carriage: bool    # C-terms
+    has_insurance: bool          # CIF
+    insurance_cover: str | None = None
 
 
 @dataclass
@@ -89,7 +98,7 @@ def load_rules() -> dict[str, RuleConfig]:
     doc = yaml.safe_load(DATA.read_text(encoding="utf-8"))
     rules: dict[str, RuleConfig] = {}
     for code, row in doc["rules"].items():
-        cfg = RuleConfig(
+        rules[code] = RuleConfig(
             code=code,
             name=row["name"],
             family=row["family"],
@@ -100,20 +109,20 @@ def load_rules() -> dict[str, RuleConfig]:
             cost=list(row["cost"]),
             insurance_cover=row.get("insurance_cover"),
         )
-        rules[code] = cfg
     return rules
 
 
-def profile_for(c: RuleConfig) -> Profile:
-    """Build the per-rule Profile. Implemented so far: the sea F-terms FOB, FAS.
+# Shared params line for the sea F-terms (buyer nomination notice deadline).
+_F_PARAMS = "  portOfShipment: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number"
+# Shared params line for the sea C-terms (destination port + carriage deadline).
+_C_PARAMS = "  portOfShipment: String, portOfDestination: String, effDate: Date, carriageDays: Number, deliveryDays: Number, paymentDays: Number"
 
-    Both are sea terms where the buyer contracts carriage and nominates the
-    vessel; they differ in the delivery point (on board vs alongside) and hence
-    in the seller's document obligation (carrier bill of lading vs the usual
-    proof of delivery alongside).
-    """
+
+def profile_for(c: RuleConfig) -> Profile:
+    """Build the per-rule Profile. Implemented: the sea family FOB/FAS/CFR/CIF."""
     if c.code == "FOB":
         return Profile(
+            term_type="F",
             domain_comment=[
                 "  // FOB - Free on Board (Incoterms 2020), named port of shipment.",
                 "  // Seller bears cost and risk up to the moment the goods are on board the",
@@ -124,14 +133,20 @@ def profile_for(c: RuleConfig) -> Profile:
             delivery_date_attr="onBoardDate",
             delivery_domain_comment="  // Delivery: seller places the goods on board the nominated vessel (risk passes).",
             documents_domain_comment="  // Seller hands the buyer the usual proof of delivery (the bill of lading).",
+            contract_params_tail=_F_PARAMS,
             point_phrase="on board",
             export_before_phrase="they go on board",
             deliver_place_phrase="on board it",
+            provide_docs_line2="  // provides the buyer with that proof of delivery.",
             has_carrier=True,
             has_bol=True,
+            has_vessel_nomination=True,
+            has_seller_carriage=False,
+            has_insurance=False,
         )
     if c.code == "FAS":
         return Profile(
+            term_type="F",
             domain_comment=[
                 "  // FAS - Free Alongside Ship (Incoterms 2020), named port of shipment.",
                 "  // Seller bears cost and risk up to the moment the goods are placed alongside",
@@ -142,11 +157,65 @@ def profile_for(c: RuleConfig) -> Profile:
             delivery_date_attr="alongsideDate",
             delivery_domain_comment="  // Delivery: seller places the goods alongside the nominated vessel (risk passes).",
             documents_domain_comment="  // Seller hands the buyer the usual proof that the goods were delivered alongside.",
+            contract_params_tail=_F_PARAMS,
             point_phrase="alongside",
             export_before_phrase="they are placed alongside",
             deliver_place_phrase="alongside it",
+            provide_docs_line2="",  # unused: FAS has no bill of lading
             has_carrier=False,
             has_bol=False,
+            has_vessel_nomination=True,
+            has_seller_carriage=False,
+            has_insurance=False,
+        )
+    if c.code == "CFR":
+        return Profile(
+            term_type="C",
+            domain_comment=[
+                "  // CFR - Cost and Freight (Incoterms 2020), named port of destination.",
+                "  // Seller delivers on board and bears cost (freight) to the destination port,",
+                "  // but risk passes to the buyer when the goods are on board at shipment.",
+            ],
+            delivery_event="LoadedOnBoard",
+            delivery_var="loadedOnBoard",
+            delivery_date_attr="onBoardDate",
+            delivery_domain_comment="  // Delivery: seller places the goods on board the vessel (risk passes on board).",
+            documents_domain_comment="  // Seller tenders the buyer the bill of lading for the destination port.",
+            contract_params_tail=_C_PARAMS,
+            point_phrase="on board",
+            export_before_phrase="they go on board",
+            deliver_place_phrase="",  # unused: C-terms have no vessel nomination
+            provide_docs_line2="  // tenders it to the buyer as the usual transport document.",
+            has_carrier=True,
+            has_bol=True,
+            has_vessel_nomination=False,
+            has_seller_carriage=True,
+            has_insurance=False,
+        )
+    if c.code == "CIF":
+        return Profile(
+            term_type="C",
+            domain_comment=[
+                "  // CIF - Cost, Insurance and Freight (Incoterms 2020), named port of destination.",
+                "  // Seller delivers on board and bears cost (freight + insurance) to the",
+                "  // destination port; risk passes to the buyer when the goods are on board.",
+            ],
+            delivery_event="LoadedOnBoard",
+            delivery_var="loadedOnBoard",
+            delivery_date_attr="onBoardDate",
+            delivery_domain_comment="  // Delivery: seller places the goods on board the vessel (risk passes on board).",
+            documents_domain_comment="  // Seller tenders the buyer the bill of lading for the destination port.",
+            contract_params_tail=_C_PARAMS + ", insuranceCover: String",
+            point_phrase="on board",
+            export_before_phrase="they go on board",
+            deliver_place_phrase="",
+            provide_docs_line2="  // tenders it to the buyer as the usual transport document.",
+            has_carrier=True,
+            has_bol=True,
+            has_vessel_nomination=False,
+            has_seller_carriage=True,
+            has_insurance=True,
+            insurance_cover=c.insurance_cover,
         )
     raise NotImplementedError(f"no profile for {c.code} yet")
 
@@ -165,10 +234,12 @@ def emit_domain(c: RuleConfig) -> list[str]:
         "  Buyer isA Role with name: String, org: String;",
     ]
     if p.has_carrier:
-        L += [
-            "  // The carrier operates the vessel the buyer nominates; it issues the bill of lading.",
-            "  Carrier isA Role thirdParty with name: String, org: String;",
-        ]
+        carrier_comment = (
+            "  // The carrier the seller contracts to carry the goods to the destination port; it issues the bill of lading."
+            if p.term_type == "C"
+            else "  // The carrier operates the vessel the buyer nominates; it issues the bill of lading."
+        )
+        L += [carrier_comment, "  Carrier isA Role thirdParty with name: String, org: String;"]
     L += [
         "  Currency isAn Enumeration(CAD, USD, EUR);",
         "  // The goods sold; owner defaults to the seller until delivery.",
@@ -179,11 +250,26 @@ def emit_domain(c: RuleConfig) -> list[str]:
             "  // The bill of lading: the transport document evidencing shipment on board.",
             "  BillOfLading isAn Asset with blNumber: String, owner: Carrier;",
         ]
+    if p.has_vessel_nomination:
+        L += [
+            "  // Buyer nominates the vessel and gives notice (name, loading point, deadline).",
+            "  VesselNominated isAn Event with Env vesselName: String, Env loadingPort: String, dueDate: Date, performer: Buyer, controller: Buyer;",
+        ]
     L += [
-        "  // Buyer nominates the vessel and gives notice (name, loading point, deadline).",
-        "  VesselNominated isAn Event with Env vesselName: String, Env loadingPort: String, dueDate: Date, performer: Buyer, controller: Buyer;",
         "  // Seller clears the goods for export.",
         "  ExportCleared isAn Event with performer: Seller, controller: Seller;",
+    ]
+    if p.has_seller_carriage:
+        L += [
+            "  // Seller contracts carriage to the named destination port (and pays the freight).",
+            "  CarriageContracted isAn Event with destinationPort: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;",
+        ]
+    if p.has_insurance:
+        L += [
+            "  // Seller takes out cargo insurance for the buyer's benefit (level recorded as data).",
+            "  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, performer: Seller, controller: Seller;",
+        ]
+    L += [
         p.delivery_domain_comment,
         f"  {p.delivery_event} isAn Event with port: String, Env {p.delivery_date_attr}: Date, delDueDate: Date, performer: Seller, controller: Seller;",
     ]
@@ -210,7 +296,7 @@ def emit_contract_header(c: RuleConfig) -> list[str]:
         f"Contract {c.code} (",
         f"  sellerP: Seller, {carrier}",
         "  goodsDesc: String, qty: Number, price: Number, curr: Currency,",
-        "  portOfShipment: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number",
+        c.profile.contract_params_tail,
         ")",
     ]
 
@@ -227,9 +313,14 @@ def emit_declarations(c: RuleConfig) -> list[str]:
     L += ["  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;"]
     if p.has_bol:
         L += ['  billOfLading: BillOfLading with blNumber := "", owner := carrier;']
+    if p.has_vessel_nomination:
+        L += ["  vesselNominated: VesselNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;"]
+    L += ["  exportCleared: ExportCleared with performer := seller, controller := seller;"]
+    if p.has_seller_carriage:
+        L += ["  carriageContracted: CarriageContracted with destinationPort := portOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;"]
+    if p.has_insurance:
+        L += ["  insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;"]
     L += [
-        "  vesselNominated: VesselNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;",
-        "  exportCleared: ExportCleared with performer := seller, controller := seller;",
         f"  {p.delivery_var}: {p.delivery_event} with port := portOfShipment, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;",
     ]
     if p.has_bol:
@@ -252,16 +343,39 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         "Obligations",
         f"  // A7: the seller clears the goods for export before {p.export_before_phrase}.",
         f"  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, {p.delivery_var}));",
-        "  // A2 delivery: once the buyer has nominated the vessel, the seller must place",
-        f"  // the goods {p.deliver_place_phrase}, at the named loading point, before the deadline.",
-        f"  oDeliver: Happens(vesselNominated) -> O(seller, buyer, true,",
-        f"              WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
-        f"              and {p.delivery_var}.port == vesselNominated.loadingPort);",
     ]
+    if p.has_seller_carriage:
+        L += [
+            "  // A4: the seller contracts carriage to the named destination port, at its own cost, in time.",
+            "  oContractCarriage: O(seller, buyer, true,",
+            "              WhappensBefore(carriageContracted, carriageContracted.dueDate)",
+            "              and carriageContracted.destinationPort == portOfDestination);",
+        ]
+    if p.has_insurance:
+        L += [
+            "  // A5: the seller takes out cargo insurance (min. ICC (C), 110% of price) for the buyer.",
+            f"  oInsure: O(seller, buyer, true, ShappensBefore(insuranceObtained, {p.delivery_var}));",
+        ]
+    if p.has_vessel_nomination:
+        L += [
+            "  // A2 delivery: once the buyer has nominated the vessel, the seller must place",
+            f"  // the goods {p.deliver_place_phrase}, at the named loading point, before the deadline.",
+            "  oDeliver: Happens(vesselNominated) -> O(seller, buyer, true,",
+            f"              WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
+            f"              and {p.delivery_var}.port == vesselNominated.loadingPort);",
+        ]
+    else:  # C-term: unconditional delivery on board at the port of shipment
+        L += [
+            "  // A2 delivery: the seller places the goods on board the vessel at the port of",
+            "  // shipment before the deadline; risk passes to the buyer on board.",
+            "  oDeliver: O(seller, buyer, true,",
+            f"              WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
+            f"              and {p.delivery_var}.port == portOfShipment);",
+        ]
     if p.has_bol:
         L += [
             "  // A6: after loading, the carrier issues the bill of lading and the seller",
-            "  // provides the buyer with that proof of delivery.",
+            p.provide_docs_line2,
             f"  oProvideDocuments: Happens({p.delivery_var}) -> O(seller, buyer, true,",
             "              Happens(billOfLadingIssued) and Happens(documentsProvided));",
         ]
@@ -272,9 +386,12 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             f"  oProvideDocuments: Happens({p.delivery_var}) -> O(seller, buyer, true,",
             "              Happens(documentsProvided));",
         ]
+    if p.has_vessel_nomination:
+        L += [
+            "  // B7/B10: the buyer nominates the vessel and gives sufficient notice in time.",
+            "  oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));",
+        ]
     L += [
-        "  // B7/B10: the buyer nominates the vessel and gives sufficient notice in time.",
-        "  oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));",
         f"  // B2: the buyer takes delivery of the goods once they are {p.point_phrase}.",
         f"  oTakeDelivery: Happens({p.delivery_var}) -> O(buyer, seller, true, Happens(goodsTakenOver));",
     ]
@@ -295,19 +412,33 @@ def emit_surviving(c: RuleConfig) -> list[str]:
 
 def emit_powers(c: RuleConfig) -> list[str]:
     p = c.profile
-    return [
-        "Powers",
-        "  // If the buyer fails to nominate the vessel in time, the seller may suspend delivery.",
-        "  pSuspendDelivery: Happens(Violated(obligations.oNominateVessel)) ->",
-        "              P(seller, buyer, true, Suspended(obligations.oDeliver)) with Controller seller;",
-        "  // A late nomination during the suspension resumes the delivery obligation.",
-        "  pResumeDelivery: HappensWithin(vesselNominated, Suspension(obligations.oDeliver)) ->",
-        "              P(buyer, seller, true, Resumed(obligations.oDeliver));",
+    L = ["Powers"]
+    if p.has_vessel_nomination:
+        L += [
+            "  // If the buyer fails to nominate the vessel in time, the seller may suspend delivery.",
+            "  pSuspendDelivery: Happens(Violated(obligations.oNominateVessel)) ->",
+            "              P(seller, buyer, true, Suspended(obligations.oDeliver)) with Controller seller;",
+            "  // A late nomination during the suspension resumes the delivery obligation.",
+            "  pResumeDelivery: HappensWithin(vesselNominated, Suspension(obligations.oDeliver)) ->",
+            "              P(buyer, seller, true, Resumed(obligations.oDeliver));",
+        ]
+    if p.has_seller_carriage:
+        L += [
+            "  // If the seller fails to contract carriage to the destination, the buyer may terminate.",
+            "  pTerminateNoCarriage: Happens(Violated(obligations.oContractCarriage)) -> P(buyer, seller, true, Terminated(self));",
+        ]
+    if p.has_insurance:
+        L += [
+            "  // If the seller fails to insure the cargo, the buyer may terminate.",
+            "  pTerminateNoInsurance: Happens(Violated(obligations.oInsure)) -> P(buyer, seller, true, Terminated(self));",
+        ]
+    L += [
         f"  // If the seller fails to deliver {p.point_phrase}, the buyer may terminate the contract.",
         "  pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));",
         "  // If the buyer fails to take delivery, the seller may terminate the contract.",
         "  pTerminateBySeller: Happens(Violated(obligations.oTakeDelivery)) -> P(seller, buyer, true, Terminated(self));",
     ]
+    return L
 
 
 def emit_acpolicy(c: RuleConfig) -> list[str]:
@@ -317,17 +448,28 @@ def emit_acpolicy(c: RuleConfig) -> list[str]:
         "  Rule1: Grant read To buyer On goods.description by seller;",
         "  Rule2: Grant read To buyer On obligations.oDeliver by seller;",
     ]
+    n = 3
+    if p.has_seller_carriage:
+        L += [f"  Rule{n}: Grant read To buyer On carriageContracted by seller;"]
+        n += 1
+    if p.has_insurance:
+        L += [f"  Rule{n}: Grant read To buyer On insuranceObtained by seller;"]
+        n += 1
     if p.has_carrier:
+        if not p.has_seller_carriage:
+            # F-term with a carrier: the carrier reads the delivery event.
+            L += [f"  Rule{n}: Grant read To carrier On {p.delivery_var} by seller;"]
+            n += 1
         L += [
-            f"  Rule3: Grant read To carrier On {p.delivery_var} by seller;",
-            "  Rule4: Grant read To seller On billOfLadingIssued by carrier;",
-            "  Rule5: Grant write To carrier On billOfLading.blNumber by seller;",
-            "  Rule6: Grant write To buyer On powers.pTerminateByBuyer by seller;",
+            f"  Rule{n}: Grant read To seller On billOfLadingIssued by carrier;",
+            f"  Rule{n + 1}: Grant write To carrier On billOfLading.blNumber by seller;",
+            f"  Rule{n + 2}: Grant write To buyer On powers.pTerminateByBuyer by seller;",
         ]
     else:
+        # No carrier (FAS): buyer reads the delivery event and holds the power.
         L += [
-            f"  Rule3: Grant read To buyer On {p.delivery_var} by seller;",
-            "  Rule4: Grant write To buyer On powers.pTerminateByBuyer by seller;",
+            f"  Rule{n}: Grant read To buyer On {p.delivery_var} by seller;",
+            f"  Rule{n + 1}: Grant write To buyer On powers.pTerminateByBuyer by seller;",
         ]
     return L
 

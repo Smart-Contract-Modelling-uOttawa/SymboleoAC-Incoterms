@@ -13,9 +13,9 @@ name: compile-specs
 
 on:
   push:
-    paths: ['specs/**', 'tests/compile/**', '.github/workflows/ci.yml']
+    paths: ['specs/**', 'generator/**', 'tests/compile/**', '.github/workflows/ci.yml']
   pull_request:
-    paths: ['specs/**', 'tests/compile/**', '.github/workflows/ci.yml']
+    paths: ['specs/**', 'generator/**', 'tests/compile/**', '.github/workflows/ci.yml']
   workflow_dispatch:
 
 jobs:
@@ -32,3 +32,15 @@ jobs:
 
       - name: Compile every spec (remote gate)
         run: bash tests/compile/run.sh specs
+
+  # The specs must be generator output, not hand-edited (STRATEGY ground rule 2).
+  regen-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+      - name: Specs match the generator
+        run: python generator/generate.py --check

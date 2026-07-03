@@ -1,0 +1,22 @@
+# Build outputs
+target/
+*.jar
+node_modules/
+dist/
+
+# Generated JS from specs (regenerate on demand)
+out/
+generated/
+
+# LaTeX build artifacts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.pdf
+paper/*.synctex.gz
+
+# Agent/session local files
+.claude/
+.DS_Store

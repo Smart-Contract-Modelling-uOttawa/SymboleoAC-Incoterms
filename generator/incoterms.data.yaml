@@ -1,0 +1,118 @@
+# Incoterms 2020 allocation tables — the source of truth for generation.
+# Transcribed from the ICC cost- and risk-allocation tables (see the project's
+# Incoterms 2020 reference). "S" = seller, "B" = buyer, "S/B" = shared/either.
+#
+# The generator reads this file + the norm templates and emits specs/<code>.symboleo.
+# Keeping the standard's own tables as data is what makes the 11 specs consistent
+# and lets differential tests assert the inter-rule differences.
+
+# 13 cost stages, in order, matching the ICC cost-allocation table columns.
+cost_stages:
+  - loading_at_origin
+  - export_customs_declaration
+  - carriage_to_port_of_export
+  - unloading_truck_port_of_export
+  - loading_on_vessel
+  - carriage_to_port_of_import
+  - insurance
+  - unloading_port_of_import
+  - loading_on_truck_port_of_import
+  - carriage_to_place_of_destination
+  - import_customs_clearance
+  - import_duties_and_taxes
+  - unloading_at_destination
+
+# Where risk passes from seller to buyer (the delivery point).
+# One of: seller_premises | named_place | first_carrier | alongside_ship |
+#         on_board | port_of_destination | destination_place | destination_terminal
+rules:
+  EXW:
+    name: Ex Works
+    family: any_mode
+    delivery_point: seller_premises
+    seller_insurance: false
+    export_clearance: buyer      # EXW: buyer clears export (seller assists)
+    import_clearance: buyer
+    cost: [B,B,B,B,B,B,B,B,B,B,B,B,B]
+  FCA:
+    name: Free Carrier
+    family: any_mode
+    delivery_point: first_carrier    # named place
+    seller_insurance: false
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,"S/B",B,B,B,B,B,B,B,B,B,B]
+  CPT:
+    name: Carriage Paid To
+    family: any_mode
+    delivery_point: first_carrier
+    seller_insurance: false
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,S,S,S,S,B,"S/B","S/B",B,B,B,B]
+  CIP:
+    name: Carriage and Insurance Paid To
+    family: any_mode
+    delivery_point: first_carrier
+    seller_insurance: true
+    insurance_cover: ICC_A_110pct       # Incoterms 2020 raised CIP to ICC (A)
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,S,S,S,S,S,"S/B","S/B",B,B,B,B]
+  DAP:
+    name: Delivered At Place
+    family: any_mode
+    delivery_point: destination_place
+    seller_insurance: false
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,S,S,S,S,S,S,S,S,B,B,B]
+  DPU:
+    name: Delivered At Place Unloaded
+    family: any_mode
+    delivery_point: destination_terminal   # unloaded at destination
+    seller_insurance: false
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,S,S,S,S,S,S,S,S,B,B,S]
+  DDP:
+    name: Delivered Duty Paid
+    family: any_mode
+    delivery_point: destination_place
+    seller_insurance: false
+    export_clearance: seller
+    import_clearance: seller
+    cost: [S,S,S,S,S,S,S,S,S,S,S,S,B]
+  FAS:
+    name: Free Alongside Ship
+    family: sea
+    delivery_point: alongside_ship
+    seller_insurance: false
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,S,S,B,B,B,B,B,B,B,B,B]
+  FOB:
+    name: Free on Board
+    family: sea
+    delivery_point: on_board
+    seller_insurance: false
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,S,S,S,B,B,B,B,B,B,B,B]
+  CFR:
+    name: Cost and Freight
+    family: sea
+    delivery_point: on_board          # risk passes on board; seller pays freight
+    seller_insurance: false
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,S,S,S,S,B,B,B,B,B,B,B]
+  CIF:
+    name: Cost, Insurance and Freight
+    family: sea
+    delivery_point: on_board
+    seller_insurance: true
+    insurance_cover: ICC_C_110pct       # CIF default remains ICC (C)
+    export_clearance: seller
+    import_clearance: buyer
+    cost: [S,S,S,S,S,S,S,B,B,B,B,B,B]

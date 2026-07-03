@@ -10,9 +10,13 @@ tests are apples-to-apples.
 
 ## Status & usage
 
-`generate.py` (Python 3, PyYAML) reproduces the golden `specs/FOB.symboleo`
-**byte-for-byte** (content), and the output compiles 0 errors / 0 warnings.
-Remaining rules are layered on by extending `derive()` + the section emitters.
+`generate.py` (Python 3, PyYAML) generates **all 11 rules**, each compiling
+0 errors / 0 warnings, and reproduces the golden `specs/FOB.symboleo`
+**byte-for-byte** (content). Rules are described by a per-rule `Profile` on two
+orthogonal axes — **term_type** (E/F/C/D) × **family** (sea/any_mode) — plus
+feature switches (carrier bill of lading, seller insurance, seller import
+clearance). The shared `emit_*` section templates read those switches so each
+spec declares only the norms its Incoterms rule actually uses.
 
 ```bash
 python generator/generate.py                 # (re)write implemented specs into specs/

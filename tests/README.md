@@ -5,23 +5,37 @@ as specs land.
 
 ## 1. Static — compile gate (`tests/compile/`)
 
-Every `specs/*.symboleo` must compile with **0 errors** using the SymboleoAC
-compiler. The compiler reads a spec on stdin and prints JSON diagnostics
-(`{issues, summary}`); exit 0 = clean, exit 1 = validation errors, and a
-`--model` flag prints the structured model instead.
+Every `specs/*.symboleo` must compile with **0 errors**. The gate runs the whole
+`specs/` dir through the SymboleoAC codegen and fails on any `summary.errors != 0`.
+It has **two interchangeable backends**, selected by env:
+
+| Backend | Env | Used by | Why |
+|---------|-----|---------|-----|
+| Local jar | `CODEGEN_JAR` = path to the codegen-cli fat jar | local dev, reproducibility | offline, no live service |
+| Remote bridge | `BACKEND_URL` = deployed SymboleoAC-Web bridge | CI | no jar/Maven in CI; same codegen the Web IDE uses |
+
+Both return the same JSON (`{summary:{generatedFiles,warnings,errors}, issues}`) —
+the remote `/generate` endpoint just shells out to that jar.
 
 ```bash
-# one spec
+# portable gate (jar OR remote), loops every spec:
+CODEGEN_JAR=/path/to/symboleoac-codegen-cli-1.0.0-all.jar  tests/compile/run.sh
+BACKEND_URL=https://159-69-216-244.sslip.io                tests/compile/run.sh
+
+# Windows local dev (jar only):
+$env:CODEGEN_JAR = "C:\...\symboleoac-codegen-cli-1.0.0-all.jar"; .\tests\compile\run.ps1
+
+# one spec, by hand:
 cat specs/FOB.symboleo | java -jar "$CODEGEN_JAR"
 # expect: {"summary":{"generatedFiles":N,"warnings":0,"errors":0}} and exit 0
 ```
 
-Wire `CODEGEN_JAR` to a SymboleoAC compiler fat jar. Two ways to obtain it
-(decide in the session):
-- build from https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC2SC, or
-- reuse the `codegen-cli` fat jar from SymboleoAC-Web (same upstream grammar).
+Obtain `CODEGEN_JAR` by building from
+https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC2SC, or reuse the
+`codegen-cli` fat jar from SymboleoAC-Web (same upstream grammar).
 
-CI (`.github/workflows/ci.yml`) runs this over every spec on push.
+CI (`.github/workflows/ci.yml`) runs `run.sh` in **remote** mode over every spec
+on push. Override the endpoint with a `BACKEND_URL` repo variable.
 
 ## 2. Structural (`tests/`)
 

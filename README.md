@@ -1,5 +1,7 @@
 # SymboleoAC-Incoterms
 
+[![compile-specs](https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC-Incoterms/actions/workflows/ci.yml/badge.svg)](https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC-Incoterms/actions/workflows/ci.yml)
+
 **Formalizing the Incoterms® 2020 trade terms as executable [SymboleoAC](https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC2SC) contracts — with a coverage analysis and a validation strategy.**
 
 Incoterms 2020 (ICC) defines **11 standard trade terms** (EXW, FCA, CPT, CIP, DAP, DPU, DDP, FAS, FOB, CFR, CIF) that allocate the *delivery point, risks, costs, insurance, clearance, documents, and notices* between seller and buyer. This project:

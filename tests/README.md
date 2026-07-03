@@ -44,13 +44,39 @@ Run the compiler with `--model` and assert, per spec:
 - every `obligations.x` / `powers.x` cross-reference resolves;
 - role/asset/event references are all bound.
 
-## 3. Scenario execution (`tests/scenarios/`)
+## 3. Scenario execution (`tests/scenarios/`) — implemented ✅
 
-SymboleoAC generates runnable JS on `symboleoac-js-core`. Per rule, drive event
-traces and assert final contract/norm state:
-- **happy path** — all obligations fulfilled in order → contract fulfilled;
-- **breach** — e.g. missed delivery activates the buyer's `terminate` power;
-  late vessel nomination drives `suspend` → `resume`.
+Drives event traces on the generated JS (`symboleoac-js-core`) and asserts the
+resulting norm/contract states. **22 tests: all 11 rules × {happy, breach}.**
+
+```bash
+cd tests/scenarios && npm install
+CODEGEN_JAR=/path/to/…-all.jar  npm run gen   # or: BACKEND_URL=https://…  npm run gen
+npm test                                       # node --test
+```
+
+- **happy path** — fire every obligation's events in order → all obligations
+  (incl. the surviving `oPay`) reach `Fulfillment` and the contract reaches
+  `SuccessfulTermination`.
+- **breach** — violate a seller obligation → the buyer's matching terminate
+  power is created (`oDeliver`→`pTerminateByBuyer`, `oInsure`→
+  `pTerminateNoInsurance`, `oContractCarriage`→`pTerminateNoCarriage`,
+  `oImportClearance`→`pTerminateNoImportClearance`).
+
+How it works (see `harness.mjs`): the compiler emits Fabric chaincode, but the
+norm logic is in `domain/contract/<CODE>.js` + `events.js` on `symboleoac-js-core`.
+The harness stubs the Fabric wrapper (`index.js`) in the require cache and drives
+the contract directly — construct, `Events.init`, then `fire(event)` /
+`violate(obl)` — rebuilding the event map before each emit (mirroring the
+per-transaction re-init the Fabric wrapper does), since some norms are created
+lazily. `scenarios.mjs` holds the per-rule constructor args + event traces;
+`generate.mjs` (re)builds `generated/` (gitignored).
+
+> **Known upstream codegen bug (worked around):** the generated
+> `createSurvivingObligation_*` listener references an undeclared `isNewInstance`
+> (`!isNewInstance &&true`), throwing `ReferenceError` when any surviving `oPay`
+> is created. `generate.mjs` rewrites it to `true` on the way out (see
+> `patchCodegen`). Fix belongs in SymboleoAC2SC; remove the patch once landed.
 
 ## 4. Differential
 

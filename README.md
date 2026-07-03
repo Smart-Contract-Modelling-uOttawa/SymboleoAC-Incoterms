@@ -14,26 +14,28 @@ This backs a paper on the extent to which SymboleoAC supports a real, widely-use
 
 ## Status
 
-**All 11 rules are specified and compile with 0 errors / 0 warnings.**
+**All 11 rules are specified (compile 0 errors / 0 warnings) and pass happy-path
++ breach scenario execution on the generated JavaScript.**
 
 | Rule | Term type | Mode | Spec | Compiles | Scenarios |
 |------|-----------|------|------|:--------:|:---------:|
-| EXW — Ex Works | E (minimum) | any | [specs/EXW.symboleo](specs/EXW.symboleo) | ✅ | ⬜ |
-| FCA — Free Carrier | F | any | [specs/FCA.symboleo](specs/FCA.symboleo) | ✅ | ⬜ |
-| FAS — Free Alongside Ship | F | sea | [specs/FAS.symboleo](specs/FAS.symboleo) | ✅ | ⬜ |
-| FOB — Free on Board | F | sea | [specs/FOB.symboleo](specs/FOB.symboleo) | ✅ | ⬜ |
-| CPT — Carriage Paid To | C | any | [specs/CPT.symboleo](specs/CPT.symboleo) | ✅ | ⬜ |
-| CFR — Cost and Freight | C | sea | [specs/CFR.symboleo](specs/CFR.symboleo) | ✅ | ⬜ |
-| CIP — Carriage and Insurance Paid To | C + ins. | any | [specs/CIP.symboleo](specs/CIP.symboleo) | ✅ | ⬜ |
-| CIF — Cost, Insurance and Freight | C + ins. | sea | [specs/CIF.symboleo](specs/CIF.symboleo) | ✅ | ⬜ |
-| DAP — Delivered At Place | D | any | [specs/DAP.symboleo](specs/DAP.symboleo) | ✅ | ⬜ |
-| DPU — Delivered at Place Unloaded | D | any | [specs/DPU.symboleo](specs/DPU.symboleo) | ✅ | ⬜ |
-| DDP — Delivered Duty Paid | D (maximum) | any | [specs/DDP.symboleo](specs/DDP.symboleo) | ✅ | ⬜ |
+| EXW — Ex Works | E (minimum) | any | [specs/EXW.symboleo](specs/EXW.symboleo) | ✅ | ✅ |
+| FCA — Free Carrier | F | any | [specs/FCA.symboleo](specs/FCA.symboleo) | ✅ | ✅ |
+| FAS — Free Alongside Ship | F | sea | [specs/FAS.symboleo](specs/FAS.symboleo) | ✅ | ✅ |
+| FOB — Free on Board | F | sea | [specs/FOB.symboleo](specs/FOB.symboleo) | ✅ | ✅ |
+| CPT — Carriage Paid To | C | any | [specs/CPT.symboleo](specs/CPT.symboleo) | ✅ | ✅ |
+| CFR — Cost and Freight | C | sea | [specs/CFR.symboleo](specs/CFR.symboleo) | ✅ | ✅ |
+| CIP — Carriage and Insurance Paid To | C + ins. | any | [specs/CIP.symboleo](specs/CIP.symboleo) | ✅ | ✅ |
+| CIF — Cost, Insurance and Freight | C + ins. | sea | [specs/CIF.symboleo](specs/CIF.symboleo) | ✅ | ✅ |
+| DAP — Delivered At Place | D | any | [specs/DAP.symboleo](specs/DAP.symboleo) | ✅ | ✅ |
+| DPU — Delivered at Place Unloaded | D | any | [specs/DPU.symboleo](specs/DPU.symboleo) | ✅ | ✅ |
+| DDP — Delivered Duty Paid | D (maximum) | any | [specs/DDP.symboleo](specs/DDP.symboleo) | ✅ | ✅ |
 
 Specs are generated (`python generator/generate.py`); CI enforces they never
 drift from the generator. See [generator/README.md](generator/README.md).
 Coverage per Incoterms article is in [coverage/coverage-matrix.md](coverage/coverage-matrix.md).
-Scenario execution (next milestone) will fill the last column.
+Scenario execution (happy path + breach, per rule) lives in
+[tests/scenarios/](tests/scenarios/) and runs on the generated JavaScript.
 
 ## Layout
 

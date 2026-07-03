@@ -1,0 +1,16 @@
+{
+  "name": "symboleoac-incoterms-scenarios",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scenario execution tests: drive event traces on the generated SymboleoAC JS.",
+  "scripts": {
+    "gen": "node generate.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "fabric-contract-api": "^2.2.0",
+    "flatted": "^3.4.2",
+    "symboleoac-js-core": "^1.0.26"
+  }
+}

@@ -13,9 +13,9 @@ name: compile-specs
 
 on:
   push:
-    paths: ['specs/**', 'generator/**', 'tests/compile/**', '.github/workflows/ci.yml']
+    paths: ['specs/**', 'generator/**', 'tests/**', '.github/workflows/ci.yml']
   pull_request:
-    paths: ['specs/**', 'generator/**', 'tests/compile/**', '.github/workflows/ci.yml']
+    paths: ['specs/**', 'generator/**', 'tests/**', '.github/workflows/ci.yml']
   workflow_dispatch:
 
 jobs:
@@ -44,3 +44,23 @@ jobs:
       - run: pip install pyyaml
       - name: Specs match the generator
         run: python generator/generate.py --check
+
+  # Scenario execution: happy path + breach per rule on the generated JS.
+  scenarios:
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_URL: ${{ vars.BACKEND_URL || 'https://159-69-216-244.sslip.io' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install
+        working-directory: tests/scenarios
+        run: npm ci
+      - name: Generate JS from every spec (remote codegen)
+        working-directory: tests/scenarios
+        run: npm run gen
+      - name: Run scenario tests
+        working-directory: tests/scenarios
+        run: node --test

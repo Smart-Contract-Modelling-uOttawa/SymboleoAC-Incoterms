@@ -86,12 +86,17 @@ lazily. `scenarios.mjs` holds the per-rule constructor args + event traces;
 > is created. `generate.mjs` rewrites it to `true` on the way out (see
 > `patchCodegen`). Fix belongs in SymboleoAC2SC; remove the patch once landed.
 
-## 4. Differential
+## 4. Structural & differential — implemented ✅
 
-Encode inter-rule expectations from `generator/incoterms.data.yaml` as
-assertions, e.g.:
-- CIF/CIP have a seller `insure` obligation; FOB/FAS/FCA do not;
-- risk passes strictly later under CFR than FOB on the same trace;
-- D-rules place the delivery point at destination, not origin.
+`tests/scenarios/differential.test.mjs` — **8 static checks** (no generation
+needed) that parse `specs/*.symboleo` and assert the inter-rule invariants implied
+by the ICC tables, plus cross-reference integrity:
+- universal norms (deliver / take-delivery / pay + terminate powers) in every rule;
+- seller `oInsure` exactly for CIF/CIP; `oContractCarriage` exactly for C/D-terms;
+- buyer nomination + suspend/resume powers exactly for the F-terms;
+- `oImportClearance` only for DDP; `oExportClearance` for every rule but EXW;
+- D-terms deliver at destination, others at origin;
+- every `obligations.X` / `powers.X` reference resolves.
 
-These catch generator drift when a template changes.
+They run in the same `node --test` invocation as the scenarios (**44 tests total**)
+and catch generator drift where a change to one rule's profile alters another's.

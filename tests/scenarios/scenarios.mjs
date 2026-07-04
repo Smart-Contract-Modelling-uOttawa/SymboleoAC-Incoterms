@@ -26,21 +26,21 @@ const proofDocs = [ev('documentsProvided'), ev('goodsTakenOver'), ev('paid')];
 export const RULES = [
   // --- F-terms: buyer nominates; breach = seller misses delivery ---
   {
-    code: 'FOB',
+    code: 'FOB', nominates: 'oNominateVessel',
     ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
     happy: [ev('vesselNominated', { loadingPort: ORIGIN }), ev('exportCleared'),
       ev('loadedOnBoard', { port: ORIGIN }), ...withBoLDocs],
     breach: { pre: [ev('vesselNominated', { loadingPort: ORIGIN }), ev('exportCleared')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
-    code: 'FAS',
+    code: 'FAS', nominates: 'oNominateVessel',
     ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
     happy: [ev('vesselNominated', { loadingPort: ORIGIN }), ev('exportCleared'),
       ev('deliveredAlongside', { port: ORIGIN }), ...proofDocs],
     breach: { pre: [ev('vesselNominated', { loadingPort: ORIGIN }), ev('exportCleared')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
-    code: 'FCA',
+    code: 'FCA', nominates: 'oNominateCarrier',
     ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
     happy: [ev('carrierNominated', { namedPlace: ORIGIN }), ev('exportCleared'),
       ev('handedToCarrier', { place: ORIGIN }), ...proofDocs],

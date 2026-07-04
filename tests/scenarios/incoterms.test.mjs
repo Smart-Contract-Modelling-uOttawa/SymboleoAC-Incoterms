@@ -44,4 +44,35 @@ for (const R of RULES) {
     assert.ok(c.powers[R.breach.power] != null,
       `${R.code}: expected power ${R.breach.power} to be created on breach; have [${Object.keys(c.powers)}]`);
   });
+
+  // Buyer-side breach: the buyer fails to take delivery -> the seller's
+  // pTerminateBySeller power is created. Drive the happy trace up to (but not
+  // including) take-over + payment so oTakeDelivery exists and is active.
+  test(`${R.code}: breach (violate oTakeDelivery) -> pTerminateBySeller`, () => {
+    const rule = loadRule(genDir, R.code);
+    const c = makeContract(rule, R.ctor(effNow()));
+    for (const { event, attrs } of R.happy.slice(0, -2)) fire(rule, c, event, attrs);
+
+    const obl = c.obligations.oTakeDelivery;
+    assert.ok(obl != null, `${R.code}: oTakeDelivery not created before take-over`);
+    violate(rule, c, 'oTakeDelivery');
+    assert.ok(obl.isViolated(), `${R.code}.oTakeDelivery = ${obl.state}, expected Violation`);
+    assert.ok(c.powers.pTerminateBySeller != null,
+      `${R.code}: expected pTerminateBySeller on buyer breach; have [${Object.keys(c.powers)}]`);
+  });
+
+  // F-terms only: the buyer fails to nominate the vessel/carrier in time ->
+  // the seller's pSuspendDelivery power is created (a suspend, not a terminate).
+  if (R.nominates) {
+    test(`${R.code}: breach (violate ${R.nominates}) -> pSuspendDelivery`, () => {
+      const rule = loadRule(genDir, R.code);
+      const c = makeContract(rule, R.ctor(effNow()));
+      const obl = c.obligations[R.nominates];
+      assert.ok(obl != null, `${R.code}: ${R.nominates} not present`);
+      violate(rule, c, R.nominates);
+      assert.ok(obl.isViolated(), `${R.code}.${R.nominates} = ${obl.state}, expected Violation`);
+      assert.ok(c.powers.pSuspendDelivery != null,
+        `${R.code}: expected pSuspendDelivery on late nomination; have [${Object.keys(c.powers)}]`);
+    });
+  }
 }

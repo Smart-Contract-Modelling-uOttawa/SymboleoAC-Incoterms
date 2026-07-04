@@ -47,21 +47,29 @@ Run the compiler with `--model` and assert, per spec:
 ## 3. Scenario execution (`tests/scenarios/`) — implemented ✅
 
 Drives event traces on the generated JS (`symboleoac-js-core`) and asserts the
-resulting norm/contract states. **22 tests: all 11 rules × {happy, breach}.**
+resulting norm/contract states. **36 tests across all 11 rules.**
 
 ```bash
 cd tests/scenarios && npm install
 CODEGEN_JAR=/path/to/…-all.jar  npm run gen   # or: BACKEND_URL=https://…  npm run gen
 npm test                                       # node --test
+npm run coverage                               # c8 coverage of the generated norm logic
 ```
 
-- **happy path** — fire every obligation's events in order → all obligations
+- **happy path** (11) — fire every obligation's events in order → all obligations
   (incl. the surviving `oPay`) reach `Fulfillment` and the contract reaches
   `SuccessfulTermination`.
-- **breach** — violate a seller obligation → the buyer's matching terminate
-  power is created (`oDeliver`→`pTerminateByBuyer`, `oInsure`→
-  `pTerminateNoInsurance`, `oContractCarriage`→`pTerminateNoCarriage`,
-  `oImportClearance`→`pTerminateNoImportClearance`).
+- **breach** (25) — violate an obligation → the matching remedial power is created:
+  a seller obligation → the buyer's terminate power (`oDeliver`→`pTerminateByBuyer`,
+  `oInsure`→`pTerminateNoInsurance`, `oContractCarriage`→`pTerminateNoCarriage`,
+  `oImportClearance`→`pTerminateNoImportClearance`); `oTakeDelivery` (all rules) →
+  `pTerminateBySeller`; and, for the F-terms, `oNominate{Vessel,Carrier}` →
+  `pSuspendDelivery`.
+
+**Coverage.** The suite drives all 66 obligations to fulfillment and creates 35 of
+38 powers (every remedial power type except the resume power, which needs a power's
+*execution* rather than an obligation's violation). `npm run coverage` reports
+≈90% line / ≈97% function coverage of the generated norm logic (`c8`).
 
 How it works (see `harness.mjs`): the compiler emits Fabric chaincode, but the
 norm logic is in `domain/contract/<CODE>.js` + `events.js` on `symboleoac-js-core`.

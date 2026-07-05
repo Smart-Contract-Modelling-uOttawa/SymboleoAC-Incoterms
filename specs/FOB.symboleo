@@ -2,10 +2,10 @@ Domain fobDomain
   // FOB - Free on Board (Incoterms 2020), named port of shipment.
   // Seller bears cost and risk up to the moment the goods are on board the
   // vessel nominated by the buyer; risk then passes to the buyer.
-  Seller isA Role with name: String, org: String;
-  Buyer isA Role with name: String, org: String;
+  Seller isA Role with name: String, org: String, dept: String;
+  Buyer isA Role with name: String, org: String, dept: String;
   // The carrier operates the vessel the buyer nominates; it issues the bill of lading.
-  Carrier isA Role thirdParty with name: String, org: String;
+  Carrier isA Role thirdParty with name: String, org: String, dept: String;
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
@@ -34,9 +34,9 @@ Contract FOB (
 )
 
 Declarations
-  seller: Seller with name := sellerP.name, org := sellerP.org;
-  buyer: Buyer with name := buyerP.name, org := buyerP.org;
-  carrier: Carrier with name := carrierP.name, org := carrierP.org;
+  seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
+  buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
+  carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   billOfLading: BillOfLading with blNumber := "", owner := carrier;
   vesselNominated: VesselNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;

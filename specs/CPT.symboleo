@@ -2,8 +2,8 @@ Domain cptDomain
   // CPT - Carriage Paid To (Incoterms 2020), named place of destination; any mode.
   // Seller contracts carriage to destination and hands the goods to the first
   // carrier; risk passes at that handover, while cost runs to the destination.
-  Seller isA Role with name: String, org: String;
-  Buyer isA Role with name: String, org: String;
+  Seller isA Role with name: String, org: String, dept: String;
+  Buyer isA Role with name: String, org: String, dept: String;
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
@@ -28,8 +28,8 @@ Contract CPT (
 )
 
 Declarations
-  seller: Seller with name := sellerP.name, org := sellerP.org;
-  buyer: Buyer with name := buyerP.name, org := buyerP.org;
+  seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
+  buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;

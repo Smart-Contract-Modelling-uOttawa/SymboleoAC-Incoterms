@@ -17,8 +17,11 @@ Two orthogonal axes drive the templates:
   * family — **sea** (vessel / port / on-board or alongside / bill of lading) vs
     **any_mode** (carrier / place / handover to the (first) carrier).
 
-Implemented: FOB, FAS, CFR, CIF (sea) and FCA, CPT, CIP (any_mode). FOB is
-reproduced byte-for-byte from the golden spec.
+Implemented: all 11 rules. FOB was originally factored out of a hand-written
+golden spec (reproduced byte-for-byte); roles later gained a `dept: String`
+attribute required by the SymboleoAC access-control authenticate for on-chain
+deployment (see deploy/README.md), so the specs are now defined purely by this
+generator and pinned by the CI regeneration guard.
 
 Usage:
     python generator/generate.py [--only FOB[,FCA,...]] [--out specs] [--check]
@@ -471,8 +474,8 @@ def emit_domain(c: RuleConfig) -> list[str]:
     L = [f"Domain {c.domain_name}"]
     L += p.domain_comment
     L += [
-        "  Seller isA Role with name: String, org: String;",
-        "  Buyer isA Role with name: String, org: String;",
+        "  Seller isA Role with name: String, org: String, dept: String;",
+        "  Buyer isA Role with name: String, org: String, dept: String;",
     ]
     if p.has_carrier:
         carrier_comment = (
@@ -480,7 +483,7 @@ def emit_domain(c: RuleConfig) -> list[str]:
             if p.has_seller_carriage
             else "  // The carrier operates the vessel the buyer nominates; it issues the bill of lading."
         )
-        L += [carrier_comment, "  Carrier isA Role thirdParty with name: String, org: String;"]
+        L += [carrier_comment, "  Carrier isA Role thirdParty with name: String, org: String, dept: String;"]
     L += [
         "  Currency isAn Enumeration(CAD, USD, EUR);",
         "  // The goods sold; owner defaults to the seller until delivery.",
@@ -555,11 +558,11 @@ def emit_declarations(c: RuleConfig) -> list[str]:
     p = c.profile
     L = [
         "Declarations",
-        "  seller: Seller with name := sellerP.name, org := sellerP.org;",
-        "  buyer: Buyer with name := buyerP.name, org := buyerP.org;",
+        "  seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;",
+        "  buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;",
     ]
     if p.has_carrier:
-        L += ["  carrier: Carrier with name := carrierP.name, org := carrierP.org;"]
+        L += ["  carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;"]
     L += ["  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;"]
     if p.has_bol:
         L += ['  billOfLading: BillOfLading with blNumber := "", owner := carrier;']

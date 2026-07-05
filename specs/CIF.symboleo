@@ -2,10 +2,10 @@ Domain cifDomain
   // CIF - Cost, Insurance and Freight (Incoterms 2020), named port of destination.
   // Seller delivers on board and bears cost (freight + insurance) to the
   // destination port; risk passes to the buyer when the goods are on board.
-  Seller isA Role with name: String, org: String;
-  Buyer isA Role with name: String, org: String;
+  Seller isA Role with name: String, org: String, dept: String;
+  Buyer isA Role with name: String, org: String, dept: String;
   // The carrier the seller contracts to carry the goods to the destination port; it issues the bill of lading.
-  Carrier isA Role thirdParty with name: String, org: String;
+  Carrier isA Role thirdParty with name: String, org: String, dept: String;
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
@@ -36,9 +36,9 @@ Contract CIF (
 )
 
 Declarations
-  seller: Seller with name := sellerP.name, org := sellerP.org;
-  buyer: Buyer with name := buyerP.name, org := buyerP.org;
-  carrier: Carrier with name := carrierP.name, org := carrierP.org;
+  seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
+  buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
+  carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   billOfLading: BillOfLading with blNumber := "", owner := carrier;
   exportCleared: ExportCleared with performer := seller, controller := seller;

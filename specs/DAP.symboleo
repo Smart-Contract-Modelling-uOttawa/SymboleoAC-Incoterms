@@ -7,6 +7,11 @@ Domain dapDomain
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
+  // B10 (conditional): the parties may agree that the buyer is entitled to
+  // determine the time and/or point of delivery (recorded by ScheduleRightAgreed);
+  // the buyer must then give sufficient notice in time.
+  ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;
+  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, dueDate: Date, performer: Buyer, controller: Buyer;
   // A8: the seller checks (quality, weight, count), packages and marks the goods
   // appropriately for transport, at its own cost - unless unpackaged carriage is
   // usual for the trade or the parties agreed specific packaging requirements
@@ -26,6 +31,10 @@ Domain dapDomain
   ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller gives the buyer the document/notice letting it take delivery at destination.
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // A10: the seller gives the buyer the notice it needs to receive the goods -
+  // for the F-terms a dual notice: that the goods have been delivered, or that
+  // the nominated vessel/carrier failed to take them within the time agreed.
+  DeliveryNoticeGiven isAn Event with Env subject: String, performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
   // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
@@ -50,13 +59,15 @@ endDomain
 Contract DAP (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDestination: String, effDate: Date, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
+  placeOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
 )
 
 Declarations
   seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
   buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
+  scheduleRightAgreed: ScheduleRightAgreed with performer := buyer, controller := buyer;
+  scheduleNotified: ScheduleNotified with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
@@ -64,6 +75,7 @@ Declarations
   madeAvailable: MadeAvailableAtDestination with place := placeOfDestination, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
+  deliveryNoticeGiven: DeliveryNoticeGiven with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
   assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
   assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
@@ -100,6 +112,15 @@ Obligations
   // delivery of the goods at the named place of destination.
   oProvideDocuments: (Happens(madeAvailable) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(documentsProvided));
+  // A10: the seller notifies the buyer that the goods have been delivered and
+  // gives any notice the buyer needs to receive the goods.
+  oNotifyDelivery: (Happens(madeAvailable) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
+              Happens(deliveryNoticeGiven));
+  // B10 (conditional): once it is agreed that the buyer may determine the
+  // time and/or point of delivery, the buyer must give sufficient notice in
+  // time; its failure is a B3/B9(d) premature-transfer trigger.
+  oNotifySchedule: Happens(scheduleRightAgreed) -> O(buyer, seller, true,
+              WhappensBefore(scheduleNotified, scheduleNotified.dueDate));
   // B7: the buyer clears the goods for import (licences, security clearance,
   // duties) in time; its failure is this rule's B3(a) premature-transfer trigger.
   oImportClearanceBuyer: O(buyer, seller, true, WhappensBefore(importClearedByBuyer, importClearedByBuyer.dueDate));
@@ -126,13 +147,13 @@ Surviving Obligations
   // by the usual proof of delivery; this survives termination of the contract.
   oPay: ((Happens(madeAvailable) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
-  // B3/B9(d): if the buyer fails its B7 import-clearance duty,
+  // B3/B9(d): if the buyer fails its B7 import-clearance duty or the buyer fails to give the agreed B10 notice in time,
   // the buyer bears the resulting additional costs - the rules' premature
   // risk/cost transfer, guarded by the ICC proviso that the goods have been
   // clearly identified as the contract goods. A surviving obligation: like
   // the payment above, it outlives termination caused by the very failure
   // that triggered it.
-  oFailureCosts: Happens(Violated(obligations.oImportClearanceBuyer)) ->
+  oFailureCosts: (Happens(Violated(obligations.oImportClearanceBuyer)) or Happens(Violated(obligations.oNotifySchedule))) ->
               Obligation(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Powers

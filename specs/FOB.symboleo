@@ -32,6 +32,10 @@ Domain fobDomain
   BillOfLadingIssued isAn Event with Env blNumber: String, performer: Carrier, controller: Carrier;
   // Seller hands the buyer the usual proof of delivery (the bill of lading).
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // A10: the seller gives the buyer the notice it needs to receive the goods -
+  // for the F-terms a dual notice: that the goods have been delivered, or that
+  // the nominated vessel/carrier failed to take them within the time agreed.
+  DeliveryNoticeGiven isAn Event with Env subject: String, performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
   // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
@@ -73,6 +77,7 @@ Declarations
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   billOfLadingIssued: BillOfLadingIssued with performer := carrier, controller := carrier;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
+  deliveryNoticeGiven: DeliveryNoticeGiven with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
   assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
   assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
@@ -105,6 +110,10 @@ Obligations
   // provides the buyer with that proof of delivery.
   oProvideDocuments: (Happens(loadedOnBoard) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(billOfLadingIssued) and Happens(documentsProvided));
+  // A10 (dual notice): the seller notifies the buyer that the goods have been
+  // delivered - or that the nominated vessel failed to take them in time.
+  oNotifyDelivery: (Happens(loadedOnBoard) or Happens(procuredSoDelivered) or Happens(vesselFailedToLoad)) -> O(seller, buyer, true,
+              Happens(deliveryNoticeGiven));
   // B4/B10: the buyer nominates the vessel and gives sufficient notice in time.
   oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are on board.

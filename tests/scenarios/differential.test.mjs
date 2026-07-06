@@ -82,16 +82,26 @@ test('differential: string-sale alternative (procuredSoDelivered) iff not EXW', 
 });
 
 test('differential: B3/B9(d) failure provisos match the yaml b3_triggers', () => {
-  const WITH_FAILURE = new Set(['EXW', 'FCA', 'FAS', 'FOB', 'DAP', 'DPU']);
+  // Since Wave 2 every rule has at least one modelled B3/B9(d) limb.
   for (const c of ALL) {
-    assert.equal(has(c, /^\s*oFailureCosts:/m), WITH_FAILURE.has(c), `${c}: oFailureCosts presence`);
-    if (WITH_FAILURE.has(c)) {
-      assert.ok(has(c, /oFailureCosts:[\s\S]*?Happens\(goodsIdentified\)/),
-        `${c}: oFailureCosts must be guarded by the goods-identified proviso`);
-    }
+    assert.ok(has(c, /^\s*oFailureCosts:/m), `${c}: oFailureCosts presence`);
+    assert.ok(has(c, /oFailureCosts:[\s\S]*?Happens\(goodsIdentified\)/),
+      `${c}: oFailureCosts must be guarded by the goods-identified proviso`);
     // Third-party failure events: vessel for FAS/FOB, carrier for FCA.
     assert.equal(has(c, /VesselFailedToLoad isAn Event/), c === 'FAS' || c === 'FOB', `${c}: VesselFailedToLoad`);
     assert.equal(has(c, /CarrierFailedToTakeCharge isAn Event/), c === 'FCA', `${c}: CarrierFailedToTakeCharge`);
+  }
+});
+
+test('differential: A10 notice in every rule; conditional B10 schedule notice iff non-F', () => {
+  for (const c of ALL) {
+    assert.ok(has(c, /^\s*oNotifyDelivery:/m), `${c}: missing oNotifyDelivery (A10)`);
+    assert.equal(has(c, /^\s*oNotifySchedule:/m), !F_TERMS.has(c), `${c}: oNotifySchedule presence`);
+    // The F-terms' A10 is the dual delivered-or-failed notice.
+    if (F_TERMS.has(c)) {
+      assert.ok(has(c, /oNotifyDelivery: \([\s\S]*?or Happens\((vesselFailedToLoad|carrierFailedToTakeCharge)\)\)/),
+        `${c}: oNotifyDelivery must carry the dual failure limb`);
+    }
   }
 });
 

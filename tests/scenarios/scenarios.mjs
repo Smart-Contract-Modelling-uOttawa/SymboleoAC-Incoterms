@@ -22,8 +22,8 @@ const ev = (event, attrs) => ({ event, attrs });
 const pack = ev('packagedAndMarked');
 
 // Shared tails of the happy trace once the goods are delivered.
-const withBoLDocs = [ev('billOfLadingIssued'), ev('documentsProvided'), ev('goodsTakenOver'), ev('paid')];
-const proofDocs = [ev('documentsProvided'), ev('goodsTakenOver'), ev('paid')];
+const withBoLDocs = [ev('billOfLadingIssued'), ev('documentsProvided'), ev('deliveryNoticeGiven'), ev('goodsTakenOver'), ev('paid')];
+const proofDocs = [ev('documentsProvided'), ev('deliveryNoticeGiven'), ev('goodsTakenOver'), ev('paid')];
 
 export const RULES = [
   // --- F-terms: buyer nominates; breach = seller misses delivery ---
@@ -51,52 +51,52 @@ export const RULES = [
   // --- C-terms: seller carriage; oDeliver is unconditional (exists at ctor) ---
   {
     code: 'CFR',
-    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, CARRIAGE, DELIV, PAY],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY],
     happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('loadedOnBoard'), ...withBoLDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'CIF',
-    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, CARRIAGE, DELIV, PAY, 'ICC(C) 110%'],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY, 'ICC(C) 110%'],
     happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained'), ev('loadedOnBoard'), ...withBoLDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained')], violate: 'oInsure', power: 'pTerminateNoInsurance' },
   },
   {
     code: 'CPT',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, CARRIAGE, DELIV, PAY],
+    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY],
     happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('handedToFirstCarrier'), ...proofDocs],
     breach: { pre: [ev('exportCleared')], violate: 'oContractCarriage', power: 'pTerminateNoCarriage' },
   },
   {
     code: 'CIP',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, CARRIAGE, DELIV, PAY, 'ICC(A) 110%'],
+    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY, 'ICC(A) 110%'],
     happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained'), ev('handedToFirstCarrier'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oInsure', power: 'pTerminateNoInsurance' },
   },
   // --- D-terms: seller carriage + delivery at destination ---
   {
     code: 'DAP',
-    ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, IMPORT, DELIV, PAY],
+    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY],
     happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('madeAvailable'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'DPU',
-    ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, IMPORT, DELIV, PAY],
+    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY],
     happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('unloadedAtDestination'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'DDP',
-    ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, DELIV, PAY],
+    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY],
     happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('importCleared'), ev('madeAvailable'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oImportClearance', power: 'pTerminateNoImportClearance' },
   },
   // --- E-term: minimum seller obligation ---
   {
     code: 'EXW',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, DELIV, PAY],
-    happy: [pack, ev('goodsMadeAvailable'), ev('goodsTakenOver'), ev('paid')],
+    ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
+    happy: [pack, ev('goodsMadeAvailable'), ev('deliveryNoticeGiven'), ev('goodsTakenOver'), ev('paid')],
     breach: { pre: [], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
 ];

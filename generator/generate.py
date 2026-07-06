@@ -174,6 +174,13 @@ class Profile:
         return "import_clearance_violated" in self.b3_triggers
 
     @property
+    def has_schedule_notice(self) -> bool:
+        # Non-F rules carry the conditional B10 notice ("whenever it is agreed
+        # that the buyer is entitled to determine the time and/or point ...");
+        # for the F-terms the nomination obligation IS the B10 notice.
+        return not self.has_nomination
+
+    @property
     def third_party_failure(self) -> tuple[str, str] | None:
         # (EventType, varName) of the modelled third-party failure event.
         if "vessel_failed" in self.b3_triggers:
@@ -236,17 +243,19 @@ def load_rules() -> dict[str, RuleConfig]:
 
 
 def _params_tail(term: str, vocab: dict, insurance: bool, buyer_import: bool = False) -> str:
+    # noticeDays: F-terms use it for the nomination deadline; the other rules
+    # (Wave 2) use it for the conditional B10 schedule notice (oNotifySchedule).
     if term == "F":
         tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number"
     elif term == "C":
-        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, carriageDays: Number, deliveryDays: Number, paymentDays: Number"
+        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, carriageDays: Number, deliveryDays: Number, paymentDays: Number"
     elif term == "D":
         # Delivery is at destination; there is no separate origin place param.
         # DAP/DPU add the buyer's import-clearance deadline (importDays).
         days = "carriageDays: Number, importDays: Number, deliveryDays: Number" if buyer_import else "carriageDays: Number, deliveryDays: Number"
-        tail = f"  {vocab['dest_param']}: String, effDate: Date, {days}, paymentDays: Number"
+        tail = f"  {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, {days}, paymentDays: Number"
     else:  # "E": EXW — goods made available at the seller's premises, nothing else.
-        tail = f"  {vocab['origin_param']}: String, effDate: Date, deliveryDays: Number, paymentDays: Number"
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number"
     if insurance:
         tail += ", insuranceCover: String"
     return tail
@@ -552,6 +561,14 @@ def emit_domain(c: RuleConfig) -> list[str]:
             f"  // Buyer nominates the {p.transport_noun} and gives notice (name, {p.nomination_place_word}, deadline).",
             f"  {p.nomination_event} isAn Event with Env {p.nomination_name_attr}: String, Env {p.nomination_place_attr}: String, dueDate: Date, performer: Buyer, controller: Buyer;",
         ]
+    if p.has_schedule_notice:
+        L += [
+            "  // B10 (conditional): the parties may agree that the buyer is entitled to",
+            "  // determine the time and/or point of delivery (recorded by ScheduleRightAgreed);",
+            "  // the buyer must then give sufficient notice in time.",
+            "  ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;",
+            "  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, dueDate: Date, performer: Buyer, controller: Buyer;",
+        ]
     if p.third_party_failure:
         ev, _ = p.third_party_failure
         failure_comment = (
@@ -631,6 +648,10 @@ def emit_domain(c: RuleConfig) -> list[str]:
             "  OnBoardBLForwarded isAn Event with performer: Seller, controller: Seller;",
         ]
     L += [
+        "  // A10: the seller gives the buyer the notice it needs to receive the goods -",
+        "  // for the F-terms a dual notice: that the goods have been delivered, or that",
+        "  // the nominated vessel/carrier failed to take them within the time agreed.",
+        "  DeliveryNoticeGiven isAn Event with Env subject: String, performer: Seller, controller: Seller;",
         "  // Buyer takes delivery of the goods.",
         "  GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;",
     ]
@@ -691,6 +712,11 @@ def emit_declarations(c: RuleConfig) -> list[str]:
         L += ['  billOfLading: BillOfLading with blNumber := "", owner := carrier;']
     if p.has_nomination:
         L += [f"  {p.nomination_var}: {p.nomination_event} with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;"]
+    if p.has_schedule_notice:
+        L += [
+            "  scheduleRightAgreed: ScheduleRightAgreed with performer := buyer, controller := buyer;",
+            "  scheduleNotified: ScheduleNotified with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;",
+        ]
     if p.third_party_failure:
         ev, var = p.third_party_failure
         L += [f"  {var}: {ev} with performer := buyer, controller := buyer;"]
@@ -721,7 +747,10 @@ def emit_declarations(c: RuleConfig) -> list[str]:
             "  onBoardBLIssued: OnBoardBLIssued with performer := carrier, controller := carrier;",
             "  onBoardBLForwarded: OnBoardBLForwarded with performer := seller, controller := seller;",
         ]
-    L += ["  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;"]
+    L += [
+        "  deliveryNoticeGiven: DeliveryNoticeGiven with performer := seller, controller := seller;",
+        "  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;",
+    ]
     if p.assist_to_buyer:
         L += [
             "  assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;",
@@ -847,6 +876,23 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             f"  oProvideDocuments: {delivered} -> O(seller, buyer, true,",
             "              Happens(documentsProvided));",
         ]
+    if p.has_nomination and p.third_party_failure:
+        _, fvar = p.third_party_failure
+        notify_trigger = f"({delivered[1:-1]} or Happens({fvar}))" if p.has_string_sale else f"(Happens({p.delivery_var}) or Happens({fvar}))"
+        notify_comment = [
+            "  // A10 (dual notice): the seller notifies the buyer that the goods have been",
+            f"  // delivered - or that the nominated {p.transport_noun} failed to take them in time.",
+        ]
+    else:
+        notify_trigger = delivered
+        notify_comment = [
+            "  // A10: the seller notifies the buyer that the goods have been delivered and",
+            "  // gives any notice the buyer needs to receive the goods.",
+        ]
+    L += notify_comment + [
+        f"  oNotifyDelivery: {notify_trigger} -> O(seller, buyer, true,",
+        "              Happens(deliveryNoticeGiven));",
+    ]
     if p.has_onboard_bl:
         L += [
             "  // B6 (optional, if agreed): the buyer instructs its carrier - at the buyer's",
@@ -863,6 +909,14 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         L += [
             f"  // B4/B10: the buyer nominates the {p.transport_noun} and gives sufficient notice in time.",
             f"  {p.nominate_obl}: O(buyer, seller, true, WhappensBefore({p.nomination_var}, {p.nomination_var}.dueDate));",
+        ]
+    if p.has_schedule_notice:
+        L += [
+            "  // B10 (conditional): once it is agreed that the buyer may determine the",
+            "  // time and/or point of delivery, the buyer must give sufficient notice in",
+            "  // time; its failure is a B3/B9(d) premature-transfer trigger.",
+            "  oNotifySchedule: Happens(scheduleRightAgreed) -> O(buyer, seller, true,",
+            "              WhappensBefore(scheduleNotified, scheduleNotified.dueDate));",
         ]
     if p.has_buyer_import_clearance:
         L += [
@@ -927,6 +981,9 @@ def emit_surviving(c: RuleConfig) -> list[str]:
             elif t == "take_delivery_violated":
                 parts.append("Happens(Violated(obligations.oTakeDelivery))")
                 why.append("the buyer fails to take delivery of the goods at its disposal")
+            elif t == "notice_violated":
+                parts.append("Happens(Violated(obligations.oNotifySchedule))")
+                why.append("the buyer fails to give the agreed B10 notice in time")
         trigger = parts[0] if len(parts) == 1 else "(" + " or ".join(parts) + ")"
         L += [
             f"  // B3/B9(d): if {' or '.join(why)},",

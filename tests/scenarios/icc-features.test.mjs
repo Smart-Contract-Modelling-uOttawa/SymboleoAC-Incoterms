@@ -64,6 +64,10 @@ const FAILURES = [
   { code: 'DAP', pre: [], violate: 'oImportClearanceBuyer' },
   { code: 'DPU', pre: [], violate: 'oImportClearanceBuyer' },
   { code: 'EXW', pre: [{ event: 'goodsMadeAvailable' }], violate: 'oTakeDelivery' },
+  // B10-notice limb (non-F rules): the buyer was given the right to determine
+  // the delivery schedule, then failed to give the agreed notice in time.
+  ...['EXW', 'CPT', 'CIP', 'CFR', 'CIF', 'DAP', 'DPU', 'DDP'].map((code) => (
+    { code, pre: [{ event: 'scheduleRightAgreed' }], violate: 'oNotifySchedule' })),
 ];
 
 for (const FCASE of FAILURES) {

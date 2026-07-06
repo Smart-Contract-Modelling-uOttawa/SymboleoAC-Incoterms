@@ -38,6 +38,10 @@ Domain fcaDomain
   BLInstructionGiven isAn Event with performer: Buyer, controller: Buyer;
   OnBoardBLIssued isAn Event with Env blNumber: String, performer: Carrier, controller: Carrier;
   OnBoardBLForwarded isAn Event with performer: Seller, controller: Seller;
+  // A10: the seller gives the buyer the notice it needs to receive the goods -
+  // for the F-terms a dual notice: that the goods have been delivered, or that
+  // the nominated vessel/carrier failed to take them within the time agreed.
+  DeliveryNoticeGiven isAn Event with Env subject: String, performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
   // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
@@ -81,6 +85,7 @@ Declarations
   blInstructionGiven: BLInstructionGiven with performer := buyer, controller := buyer;
   onBoardBLIssued: OnBoardBLIssued with performer := carrier, controller := carrier;
   onBoardBLForwarded: OnBoardBLForwarded with performer := seller, controller := seller;
+  deliveryNoticeGiven: DeliveryNoticeGiven with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
   assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
   assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
@@ -113,6 +118,10 @@ Obligations
   // with the usual proof that the goods were delivered.
   oProvideDocuments: (Happens(handedToCarrier) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(documentsProvided));
+  // A10 (dual notice): the seller notifies the buyer that the goods have been
+  // delivered - or that the nominated carrier failed to take them in time.
+  oNotifyDelivery: (Happens(handedToCarrier) or Happens(procuredSoDelivered) or Happens(carrierFailedToTakeCharge)) -> O(seller, buyer, true,
+              Happens(deliveryNoticeGiven));
   // B6 (optional, if agreed): the buyer instructs its carrier - at the buyer's
   // cost and risk - to issue the seller an on-board bill of lading.
   oInstructCarrierBL: Happens(onBoardBLAgreed) -> O(buyer, seller, true,

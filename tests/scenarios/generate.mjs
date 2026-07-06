@@ -39,6 +39,16 @@ export function patchCodegen(js) {
       `createSurvivingObligation_${name}(contract) {\n` +
       `    const isNewInstance = contract.survivingObligations.${name} != null && contract.survivingObligations.${name}.isFinished();\n`,
   );
+  // SECOND UPSTREAM CODEGEN BUG: an arithmetic expression in a consequent
+  // (e.g. `insuredAmount >= 1.1 * price`) is compiled correctly in the norm
+  // evaluation (events.js) but the LegalSituation metadata builder in the
+  // contract class nests a stringified addConsequentOf(...) inside the
+  // rightSide string with unescaped quotes - a JS SyntaxError ("Unexpected
+  // number"). Rewrite the nested garbage into the intended flat expression.
+  js = js.replace(
+    /rightSide: 'this\.\w+Situation\.addConsequentOf\(\{ leftSide:'([\d.]+)', op:'([*+/-])',\s*rightSide: '([\w.]+)', _type: 'Condition'\}\)\s*\n\s*', _type: 'Condition'\}\)/g,
+    "rightSide: '$1 $2 $3', _type: 'Condition'})",
+  );
   return js;
 }
 
@@ -72,7 +82,7 @@ export async function generate(codes = ALL_CODES) {
     for (const [rel, content] of Object.entries(files)) {
       const full = path.join(outDir, rel);
       mkdirSync(path.dirname(full), { recursive: true });
-      writeFileSync(full, rel.endsWith('events.js') ? patchCodegen(content) : content);
+      writeFileSync(full, rel.endsWith('.js') ? patchCodegen(content) : content);
     }
     console.log(`gen ${code}: ${Object.keys(files).length} files`);
   }

@@ -135,6 +135,26 @@ for (const R of RULES) {
   });
 }
 
+// --- CIP/CIF additional War/Strikes cover (A5/B5/B9) --------------------------
+for (const code of ['CIF', 'CIP']) {
+  test(`${code}: additional cover (request -> info -> obtain -> pay)`, () => {
+    const R = byCode[code];
+    const rule = loadRule(genDir, code);
+    const c = makeContract(rule, R.ctor(effNow()));
+    assert.equal(c.obligations.oAdditionalCover, undefined, 'dormant before the buyer requires it');
+    fire(rule, c, 'additionalCoverRequested', { clauses: 'War/Strikes' });
+    assert.ok(c.obligations.oAdditionalCover != null, `${code}: oAdditionalCover not created`);
+    fire(rule, c, 'additionalCoverInfoGiven');   // the B5 information precondition
+    fire(rule, c, 'additionalCoverObtained', { policyNumber: 'WS-7' });
+    assert.ok(c.obligations.oAdditionalCover.isFulfilled(),
+      `${code}: oAdditionalCover = ${c.obligations.oAdditionalCover.state}`);
+    assert.ok(c.obligations.oPayAdditionalCover != null, `${code}: oPayAdditionalCover not created`);
+    fire(rule, c, 'additionalCoverPaid', { amount: 200 });
+    assert.ok(c.obligations.oPayAdditionalCover.isFulfilled(),
+      `${code}: oPayAdditionalCover = ${c.obligations.oPayAdditionalCover.state}`);
+  });
+}
+
 // --- FCA on-board B/L mechanism ----------------------------------------------
 test('FCA: on-board B/L mechanism (agree -> instruct -> issue -> forward)', () => {
   const R = byCode.FCA;

@@ -612,8 +612,20 @@ def emit_domain(c: RuleConfig) -> list[str]:
         ]
     if p.has_insurance:
         L += [
-            "  // Seller takes out cargo insurance for the buyer's benefit (level recorded as data).",
-            "  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, performer: Seller, controller: Seller;",
+            "  // A5: seller takes out cargo insurance for the buyer's benefit. The named",
+            "  // clause set (ICC (A)/(C)) stays data (coverLevel); the minimum insured",
+            "  // amount (110% of the price) and the contract currency are checked in oInsure.",
+            "  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, Env insuredAmount: Number, Env insuredCurrency: Currency, performer: Seller, controller: Seller;",
+            "  // A5: the seller provides the buyer with the policy/certificate or other",
+            "  // evidence of the insurance cover.",
+            "  InsuranceDocProvided isAn Event with performer: Seller, controller: Seller;",
+            "  // A5/B5 (conditional): additional War/Strikes cover at the buyer's request",
+            "  // and cost, subject to the buyer supplying the information the seller needs",
+            "  // ('if procurable' - the feasibility escape is recorded, not modelled).",
+            "  AdditionalCoverRequested isAn Event with Env clauses: String, performer: Buyer, controller: Buyer;",
+            "  AdditionalCoverInfoGiven isAn Event with performer: Buyer, controller: Buyer;",
+            "  AdditionalCoverObtained isAn Event with Env policyNumber: String, performer: Seller, controller: Seller;",
+            "  AdditionalCoverPaid isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;",
         ]
     L += [
         p.delivery_domain_comment,
@@ -730,7 +742,14 @@ def emit_declarations(c: RuleConfig) -> list[str]:
     if p.has_buyer_import_clearance:
         L += ["  importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;"]
     if p.has_insurance:
-        L += ["  insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;"]
+        L += [
+            "  insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;",
+            "  insuranceDocProvided: InsuranceDocProvided with performer := seller, controller := seller;",
+            "  additionalCoverRequested: AdditionalCoverRequested with performer := buyer, controller := buyer;",
+            "  additionalCoverInfoGiven: AdditionalCoverInfoGiven with performer := buyer, controller := buyer;",
+            "  additionalCoverObtained: AdditionalCoverObtained with performer := seller, controller := seller;",
+            "  additionalCoverPaid: AdditionalCoverPaid with performer := buyer, controller := buyer;",
+        ]
     L += [
         f"  {p.delivery_var}: {p.delivery_event} with {p.delivery_place_attr} := {p.delivery_place_param}, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;",
     ]
@@ -826,13 +845,29 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         ]
     if p.has_insurance:
         before = (
-            f"ShappensBefore(insuranceObtained, {p.delivery_var})\n"
-            f"              or ShappensBefore(insuranceObtained, procuredSoDelivered)"
+            f"(ShappensBefore(insuranceObtained, {p.delivery_var})\n"
+            f"              or ShappensBefore(insuranceObtained, procuredSoDelivered))"
             if p.has_string_sale else f"ShappensBefore(insuranceObtained, {p.delivery_var})"
         )
         L += [
-            f"  // A5: the seller takes out cargo insurance (min. {p.insurance_cover_phrase}, 110% of price) for the buyer.",
-            f"  oInsure: O(seller, buyer, true, {before});",
+            f"  // A5: the seller takes out cargo insurance (min. {p.insurance_cover_phrase} - recorded as",
+            "  // data) covering at least 110% of the price, in the contract currency -",
+            "  // both checked as constraints on the insurance event.",
+            f"  oInsure: O(seller, buyer, true, {before}",
+            "              and insuranceObtained.insuredAmount >= 1.1 * price",
+            "              and insuranceObtained.insuredCurrency == curr);",
+            "  // A5: the seller provides the buyer with the policy/certificate or other",
+            "  // evidence of cover (the buyer may claim directly from the insurer).",
+            "  oProvideInsuranceDoc: Happens(insuranceObtained) -> O(seller, buyer, true,",
+            "              Happens(insuranceDocProvided));",
+            "  // A5 (conditional): when required by the buyer - and subject to the buyer",
+            "  // providing the necessary information - the seller obtains additional",
+            "  // War/Strikes cover at the buyer's cost ('if procurable' not modelled).",
+            "  oAdditionalCover: Happens(additionalCoverRequested) -> O(seller, buyer,",
+            "              Happens(additionalCoverInfoGiven), Happens(additionalCoverObtained));",
+            "  // B9: the buyer pays for the additional cover it required.",
+            "  oPayAdditionalCover: Happens(additionalCoverObtained) -> O(buyer, seller, true,",
+            "              Happens(additionalCoverPaid));",
         ]
     if p.has_nomination:
         L += [

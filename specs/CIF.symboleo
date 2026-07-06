@@ -25,8 +25,20 @@ Domain cifDomain
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Seller contracts carriage to the named destination port (and pays the freight).
   CarriageContracted isAn Event with destinationPort: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
-  // Seller takes out cargo insurance for the buyer's benefit (level recorded as data).
-  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, performer: Seller, controller: Seller;
+  // A5: seller takes out cargo insurance for the buyer's benefit. The named
+  // clause set (ICC (A)/(C)) stays data (coverLevel); the minimum insured
+  // amount (110% of the price) and the contract currency are checked in oInsure.
+  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, Env insuredAmount: Number, Env insuredCurrency: Currency, performer: Seller, controller: Seller;
+  // A5: the seller provides the buyer with the policy/certificate or other
+  // evidence of the insurance cover.
+  InsuranceDocProvided isAn Event with performer: Seller, controller: Seller;
+  // A5/B5 (conditional): additional War/Strikes cover at the buyer's request
+  // and cost, subject to the buyer supplying the information the seller needs
+  // ('if procurable' - the feasibility escape is recorded, not modelled).
+  AdditionalCoverRequested isAn Event with Env clauses: String, performer: Buyer, controller: Buyer;
+  AdditionalCoverInfoGiven isAn Event with performer: Buyer, controller: Buyer;
+  AdditionalCoverObtained isAn Event with Env policyNumber: String, performer: Seller, controller: Seller;
+  AdditionalCoverPaid isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
   // Delivery: seller places the goods on board the vessel (risk passes on board).
   LoadedOnBoard isAn Event with port: String, Env onBoardDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // A2 alternative performance: the seller may instead procure goods already
@@ -79,6 +91,11 @@ Declarations
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPort := portOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
   insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;
+  insuranceDocProvided: InsuranceDocProvided with performer := seller, controller := seller;
+  additionalCoverRequested: AdditionalCoverRequested with performer := buyer, controller := buyer;
+  additionalCoverInfoGiven: AdditionalCoverInfoGiven with performer := buyer, controller := buyer;
+  additionalCoverObtained: AdditionalCoverObtained with performer := seller, controller := seller;
+  additionalCoverPaid: AdditionalCoverPaid with performer := buyer, controller := buyer;
   loadedOnBoard: LoadedOnBoard with port := portOfShipment, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   billOfLadingIssued: BillOfLadingIssued with performer := carrier, controller := carrier;
@@ -109,9 +126,25 @@ Obligations
   oContractCarriage: O(seller, buyer, true,
               WhappensBefore(carriageContracted, carriageContracted.dueDate)
               and carriageContracted.destinationPort == portOfDestination);
-  // A5: the seller takes out cargo insurance (min. ICC (C), 110% of price) for the buyer.
-  oInsure: O(seller, buyer, true, ShappensBefore(insuranceObtained, loadedOnBoard)
-              or ShappensBefore(insuranceObtained, procuredSoDelivered));
+  // A5: the seller takes out cargo insurance (min. ICC (C) - recorded as
+  // data) covering at least 110% of the price, in the contract currency -
+  // both checked as constraints on the insurance event.
+  oInsure: O(seller, buyer, true, (ShappensBefore(insuranceObtained, loadedOnBoard)
+              or ShappensBefore(insuranceObtained, procuredSoDelivered))
+              and insuranceObtained.insuredAmount >= 1.1 * price
+              and insuranceObtained.insuredCurrency == curr);
+  // A5: the seller provides the buyer with the policy/certificate or other
+  // evidence of cover (the buyer may claim directly from the insurer).
+  oProvideInsuranceDoc: Happens(insuranceObtained) -> O(seller, buyer, true,
+              Happens(insuranceDocProvided));
+  // A5 (conditional): when required by the buyer - and subject to the buyer
+  // providing the necessary information - the seller obtains additional
+  // War/Strikes cover at the buyer's cost ('if procurable' not modelled).
+  oAdditionalCover: Happens(additionalCoverRequested) -> O(seller, buyer,
+              Happens(additionalCoverInfoGiven), Happens(additionalCoverObtained));
+  // B9: the buyer pays for the additional cover it required.
+  oPayAdditionalCover: Happens(additionalCoverObtained) -> O(buyer, seller, true,
+              Happens(additionalCoverPaid));
   // A2 delivery: the seller places the goods on board the vessel at the port of
   // shipment before the deadline; risk passes to the buyer on board.
   // Alternatively the seller procures goods already so delivered (string sales).

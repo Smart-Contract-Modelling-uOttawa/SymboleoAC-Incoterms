@@ -34,6 +34,12 @@ test('differential: seller insurance obligation iff CIF/CIP', () => {
   for (const c of ALL) {
     assert.equal(has(c, /^\s*oInsure:/m), INSURED.has(c), `${c}: oInsure presence`);
     assert.equal(has(c, /^\s*pTerminateNoInsurance:/m), INSURED.has(c), `${c}: pTerminateNoInsurance`);
+    // Wave 2: the 110%-of-price / contract-currency constraints, the
+    // policy/certificate obligation, and the War/Strikes conditional.
+    assert.equal(has(c, /oInsure:[\s\S]*?insuredAmount >= 1\.1 \* price/), INSURED.has(c), `${c}: 110% constraint`);
+    assert.equal(has(c, /^\s*oProvideInsuranceDoc:/m), INSURED.has(c), `${c}: oProvideInsuranceDoc`);
+    assert.equal(has(c, /^\s*oAdditionalCover:/m), INSURED.has(c), `${c}: oAdditionalCover`);
+    assert.equal(has(c, /^\s*oPayAdditionalCover:/m), INSURED.has(c), `${c}: oPayAdditionalCover`);
   }
 });
 

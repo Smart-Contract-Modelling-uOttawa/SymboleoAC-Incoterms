@@ -58,7 +58,9 @@ export const RULES = [
   {
     code: 'CIF',
     ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY, 'ICC(C) 110%'],
-    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained'), ev('loadedOnBoard'), ...withBoLDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'),
+      ev('insuranceObtained', { insuredAmount: 5500, insuredCurrency: 'USD' }), ev('insuranceDocProvided'),
+      ev('loadedOnBoard'), ...withBoLDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained')], violate: 'oInsure', power: 'pTerminateNoInsurance' },
   },
   {
@@ -70,7 +72,9 @@ export const RULES = [
   {
     code: 'CIP',
     ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY, 'ICC(A) 110%'],
-    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained'), ev('handedToFirstCarrier'), ...proofDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'),
+      ev('insuranceObtained', { insuredAmount: 5500, insuredCurrency: 'USD' }), ev('insuranceDocProvided'),
+      ev('handedToFirstCarrier'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oInsure', power: 'pTerminateNoInsurance' },
   },
   // --- D-terms: seller carriage + delivery at destination ---

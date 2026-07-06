@@ -64,18 +64,20 @@ Obligations
   // B9: the buyer reimburses all costs of assistance it requested.
   oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,
               Happens(assistanceToBuyerReimbursed));
-  // B3/B9(d): if the buyer fails to take delivery of the goods at its disposal,
-  // the buyer bears the resulting additional costs - the rules' premature
-  // risk/cost transfer, guarded by the ICC proviso that the goods have been
-  // clearly identified as the contract goods.
-  oFailureCosts: Happens(Violated(obligations.oTakeDelivery)) ->
-              O(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered at the seller's premises and evidenced
   // by their collection; this survives termination of the contract.
   oPay: (Happens(goodsMadeAvailable) and Happens(goodsTakenOver)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+  // B3/B9(d): if the buyer fails to take delivery of the goods at its disposal,
+  // the buyer bears the resulting additional costs - the rules' premature
+  // risk/cost transfer, guarded by the ICC proviso that the goods have been
+  // clearly identified as the contract goods. A surviving obligation: like
+  // the payment above, it outlives termination caused by the very failure
+  // that triggered it.
+  oFailureCosts: Happens(Violated(obligations.oTakeDelivery)) ->
+              Obligation(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Powers
   // If the seller fails to deliver at the seller's premises, the buyer may terminate the contract.

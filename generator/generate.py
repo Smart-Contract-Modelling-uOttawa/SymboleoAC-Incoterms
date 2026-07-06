@@ -877,6 +877,23 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             "  oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,",
             "              Happens(assistanceToSellerReimbursed));",
         ]
+    return L
+
+
+def emit_surviving(c: RuleConfig) -> list[str]:
+    p = c.profile
+    evidence = p.pay_evidence or ("the bill of lading" if p.has_bol else "the usual proof of delivery")
+    delivered = (
+        f"(Happens({p.delivery_var}) or Happens(procuredSoDelivered))"
+        if p.has_string_sale else f"Happens({p.delivery_var})"
+    )
+    L = [
+        "Surviving Obligations",
+        f"  // B1: the buyer must pay the price for goods delivered {p.point_phrase} and evidenced",
+        f"  // by {evidence}; this survives termination of the contract.",
+        f"  oPay: ({delivered} and Happens({p.pay_second_conjunct})) -> Obligation(buyer, seller, true,",
+        "              WhappensBefore(paid, paid.payDueDate) and paid.amount == price);",
+    ]
     if p.has_failure_costs:
         parts, why = [], []
         for t in p.b3_triggers:
@@ -898,27 +915,13 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             f"  // B3/B9(d): if {' or '.join(why)},",
             "  // the buyer bears the resulting additional costs - the rules' premature",
             "  // risk/cost transfer, guarded by the ICC proviso that the goods have been",
-            "  // clearly identified as the contract goods.",
+            "  // clearly identified as the contract goods. A surviving obligation: like",
+            "  // the payment above, it outlives termination caused by the very failure",
+            "  // that triggered it.",
             f"  oFailureCosts: {trigger} ->",
-            "              O(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));",
+            "              Obligation(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));",
         ]
     return L
-
-
-def emit_surviving(c: RuleConfig) -> list[str]:
-    p = c.profile
-    evidence = p.pay_evidence or ("the bill of lading" if p.has_bol else "the usual proof of delivery")
-    delivered = (
-        f"(Happens({p.delivery_var}) or Happens(procuredSoDelivered))"
-        if p.has_string_sale else f"Happens({p.delivery_var})"
-    )
-    return [
-        "Surviving Obligations",
-        f"  // B1: the buyer must pay the price for goods delivered {p.point_phrase} and evidenced",
-        f"  // by {evidence}; this survives termination of the contract.",
-        f"  oPay: ({delivered} and Happens({p.pay_second_conjunct})) -> Obligation(buyer, seller, true,",
-        "              WhappensBefore(paid, paid.payDueDate) and paid.amount == price);",
-    ]
 
 
 def emit_powers(c: RuleConfig) -> list[str]:

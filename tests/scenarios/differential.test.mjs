@@ -72,6 +72,51 @@ test('differential: D-terms deliver at destination, others at origin', () => {
   }
 });
 
+test('differential: string-sale alternative (procuredSoDelivered) iff not EXW', () => {
+  for (const c of ALL) {
+    assert.equal(has(c, /ProcuredSoDelivered isAn Event/), c !== 'EXW', `${c}: ProcuredSoDelivered event`);
+    assert.equal(has(c, /oDeliver:[\s\S]*?or WhappensBefore\(procuredSoDelivered/), c !== 'EXW',
+      `${c}: oDeliver string-sale disjunct`);
+  }
+});
+
+test('differential: B3/B9(d) failure provisos match the yaml b3_triggers', () => {
+  const WITH_FAILURE = new Set(['EXW', 'FCA', 'FAS', 'FOB', 'DAP', 'DPU']);
+  for (const c of ALL) {
+    assert.equal(has(c, /^\s*oFailureCosts:/m), WITH_FAILURE.has(c), `${c}: oFailureCosts presence`);
+    if (WITH_FAILURE.has(c)) {
+      assert.ok(has(c, /oFailureCosts:[\s\S]*?Happens\(goodsIdentified\)/),
+        `${c}: oFailureCosts must be guarded by the goods-identified proviso`);
+    }
+    // Third-party failure events: vessel for FAS/FOB, carrier for FCA.
+    assert.equal(has(c, /VesselFailedToLoad isAn Event/), c === 'FAS' || c === 'FOB', `${c}: VesselFailedToLoad`);
+    assert.equal(has(c, /CarrierFailedToTakeCharge isAn Event/), c === 'FCA', `${c}: CarrierFailedToTakeCharge`);
+  }
+});
+
+test('differential: buyer-side import clearance iff DAP/DPU (B3(a) trigger)', () => {
+  for (const c of ALL) {
+    assert.equal(has(c, /^\s*oImportClearanceBuyer:/m), c === 'DAP' || c === 'DPU',
+      `${c}: oImportClearanceBuyer presence`);
+  }
+});
+
+test('differential: assistance channels (to-buyer iff not DDP, to-seller iff not EXW)', () => {
+  for (const c of ALL) {
+    assert.equal(has(c, /^\s*oAssistBuyer:/m), c !== 'DDP', `${c}: oAssistBuyer presence`);
+    assert.equal(has(c, /^\s*oReimburseSellerAssist:/m), c !== 'DDP', `${c}: oReimburseSellerAssist presence`);
+    assert.equal(has(c, /^\s*oAssistSeller:/m), c !== 'EXW', `${c}: oAssistSeller presence`);
+    assert.equal(has(c, /^\s*oReimburseBuyerAssist:/m), c !== 'EXW', `${c}: oReimburseBuyerAssist presence`);
+  }
+});
+
+test('differential: the on-board B/L mechanism is FCA-only (Incoterms 2020 novelty)', () => {
+  for (const c of ALL) {
+    assert.equal(has(c, /^\s*oInstructCarrierBL:/m), c === 'FCA', `${c}: oInstructCarrierBL presence`);
+    assert.equal(has(c, /^\s*oForwardOnBoardBL:/m), c === 'FCA', `${c}: oForwardOnBoardBL presence`);
+  }
+});
+
 test('structural: all obligations.X / powers.X references resolve', () => {
   for (const c of ALL) {
     const s = src[c];

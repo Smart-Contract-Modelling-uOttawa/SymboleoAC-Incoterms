@@ -117,18 +117,20 @@ Obligations
   // A9: the seller reimburses all costs of assistance it requested.
   oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,
               Happens(assistanceToSellerReimbursed));
-  // B3/B9(d): if the buyer fails to nominate the vessel in time or its nominee fails to take the goods,
-  // the buyer bears the resulting additional costs - the rules' premature
-  // risk/cost transfer, guarded by the ICC proviso that the goods have been
-  // clearly identified as the contract goods.
-  oFailureCosts: (Happens(Violated(obligations.oNominateVessel)) or Happens(vesselFailedToLoad)) ->
-              O(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered on board and evidenced
   // by the bill of lading; this survives termination of the contract.
   oPay: ((Happens(loadedOnBoard) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+  // B3/B9(d): if the buyer fails to nominate the vessel in time or its nominee fails to take the goods,
+  // the buyer bears the resulting additional costs - the rules' premature
+  // risk/cost transfer, guarded by the ICC proviso that the goods have been
+  // clearly identified as the contract goods. A surviving obligation: like
+  // the payment above, it outlives termination caused by the very failure
+  // that triggered it.
+  oFailureCosts: (Happens(Violated(obligations.oNominateVessel)) or Happens(vesselFailedToLoad)) ->
+              Obligation(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Powers
   // If the buyer fails to nominate the vessel in time - or its nominee

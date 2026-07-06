@@ -121,6 +121,10 @@ class Profile:
     has_carrier: bool            # Carrier role + carrier-issued bill of lading
     has_bol: bool
     has_insurance: bool
+    # FCA only: the optional Incoterms 2020 on-board bill-of-lading mechanism
+    # (A6/B6): if agreed, the buyer instructs its carrier - at the buyer's cost
+    # and risk - to issue the seller an on-board B/L; the seller tenders it on.
+    has_onboard_bl: bool = False
     has_export_clearance: bool = True   # False for EXW (buyer clears export)
     has_documents: bool = True          # False for EXW (no seller document norm)
     has_import_clearance: bool = False  # True for DDP (seller clears import)
@@ -349,7 +353,7 @@ _SPECIFICS = {
             "  // with the usual proof that the goods were delivered.",
         ],
         c_deliver_comment=[],
-        has_carrier=False, has_bol=False, has_insurance=False,
+        has_carrier=False, has_bol=False, has_insurance=False, has_onboard_bl=True,
     ),
     "CPT": dict(
         term_type="C", family="any_mode",
@@ -527,6 +531,12 @@ def emit_domain(c: RuleConfig) -> list[str]:
             else "  // The carrier operates the vessel the buyer nominates; it issues the bill of lading."
         )
         L += [carrier_comment, "  Carrier isA Role thirdParty with name: String, org: String, dept: String;"]
+    elif p.has_onboard_bl:
+        L += [
+            "  // The carrier the buyer nominates; if the on-board B/L mechanism is agreed,",
+            "  // it issues the seller a transport document with an on-board notation.",
+            "  Carrier isA Role thirdParty with name: String, org: String, dept: String;",
+        ]
     L += [
         "  Currency isAn Enumeration(CAD, USD, EUR);",
         "  // The goods sold; owner defaults to the seller until delivery.",
@@ -601,6 +611,18 @@ def emit_domain(c: RuleConfig) -> list[str]:
             p.documents_domain_comment,
             "  DocumentsProvided isAn Event with performer: Seller, controller: Seller;",
         ]
+    if p.has_onboard_bl:
+        L += [
+            "  // FCA A6/B6 optional mechanism (new in Incoterms 2020): if the parties have",
+            "  // agreed (recorded by OnBoardBLAgreed), the buyer must instruct its carrier -",
+            "  // at the buyer's cost and risk - to issue the seller a bill of lading with an",
+            "  // on-board notation; the seller must then tender that document to the buyer.",
+            "  // The carrier is not bound by the sale contract and may decline to issue.",
+            "  OnBoardBLAgreed isAn Event with performer: Buyer, controller: Buyer;",
+            "  BLInstructionGiven isAn Event with performer: Buyer, controller: Buyer;",
+            "  OnBoardBLIssued isAn Event with Env blNumber: String, performer: Carrier, controller: Carrier;",
+            "  OnBoardBLForwarded isAn Event with performer: Seller, controller: Seller;",
+        ]
     L += [
         "  // Buyer takes delivery of the goods.",
         "  GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;",
@@ -638,7 +660,7 @@ def emit_domain(c: RuleConfig) -> list[str]:
 
 
 def emit_contract_header(c: RuleConfig) -> list[str]:
-    carrier = "buyerP: Buyer, carrierP: Carrier," if c.profile.has_carrier else "buyerP: Buyer,"
+    carrier = "buyerP: Buyer, carrierP: Carrier," if (c.profile.has_carrier or c.profile.has_onboard_bl) else "buyerP: Buyer,"
     return [
         f"Contract {c.code} (",
         f"  sellerP: Seller, {carrier}",
@@ -655,7 +677,7 @@ def emit_declarations(c: RuleConfig) -> list[str]:
         "  seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;",
         "  buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;",
     ]
-    if p.has_carrier:
+    if p.has_carrier or p.has_onboard_bl:
         L += ["  carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;"]
     L += ["  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;"]
     if p.has_bol:
@@ -684,6 +706,13 @@ def emit_declarations(c: RuleConfig) -> list[str]:
         L += ["  billOfLadingIssued: BillOfLadingIssued with performer := carrier, controller := carrier;"]
     if p.has_documents:
         L += ["  documentsProvided: DocumentsProvided with performer := seller, controller := seller;"]
+    if p.has_onboard_bl:
+        L += [
+            "  onBoardBLAgreed: OnBoardBLAgreed with performer := buyer, controller := buyer;",
+            "  blInstructionGiven: BLInstructionGiven with performer := buyer, controller := buyer;",
+            "  onBoardBLIssued: OnBoardBLIssued with performer := carrier, controller := carrier;",
+            "  onBoardBLForwarded: OnBoardBLForwarded with performer := seller, controller := seller;",
+        ]
     L += ["  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;"]
     if p.assist_to_buyer:
         L += [
@@ -800,6 +829,18 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             p.proof_docs_comment[1],
             f"  oProvideDocuments: {delivered} -> O(seller, buyer, true,",
             "              Happens(documentsProvided));",
+        ]
+    if p.has_onboard_bl:
+        L += [
+            "  // B6 (optional, if agreed): the buyer instructs its carrier - at the buyer's",
+            "  // cost and risk - to issue the seller an on-board bill of lading.",
+            "  oInstructCarrierBL: Happens(onBoardBLAgreed) -> O(buyer, seller, true,",
+            "              Happens(blInstructionGiven));",
+            "  // A6 (optional): once the carrier has issued the on-board B/L, the seller",
+            "  // tenders it to the buyer (typically through the banking chain). The carrier",
+            "  // is not bound by the sale contract, so issuance is a third-party event.",
+            "  oForwardOnBoardBL: Happens(onBoardBLIssued) -> O(seller, buyer, true,",
+            "              Happens(onBoardBLForwarded));",
         ]
     if p.has_nomination:
         L += [
@@ -947,6 +988,11 @@ def emit_acpolicy(c: RuleConfig) -> list[str]:
         ]
     else:  # proof-only rules: buyer reads the delivery event
         rules.append(f"read To buyer On {p.delivery_var} by seller")
+    if p.has_onboard_bl:  # FCA optional B/L mechanism: carrier issues, seller forwards
+        rules += [
+            "read To seller On onBoardBLIssued by carrier",
+            "read To buyer On onBoardBLForwarded by seller",
+        ]
     rules.append("write To buyer On powers.pTerminateByBuyer by seller")
 
     L = ["ACPolicy with Controller seller"]

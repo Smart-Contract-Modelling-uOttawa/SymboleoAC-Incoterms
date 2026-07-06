@@ -41,7 +41,7 @@ export const RULES = [
   },
   {
     code: 'FCA', nominates: 'oNominateCarrier',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
     happy: [ev('carrierNominated', { namedPlace: ORIGIN }), ev('exportCleared'),
       ev('handedToCarrier', { place: ORIGIN }), ...proofDocs],
     breach: { pre: [ev('carrierNominated', { namedPlace: ORIGIN }), ev('exportCleared')], violate: 'oDeliver', power: 'pTerminateByBuyer' },

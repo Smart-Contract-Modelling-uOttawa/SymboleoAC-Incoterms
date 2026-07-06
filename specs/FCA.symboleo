@@ -4,6 +4,9 @@ Domain fcaDomain
   // risk then passes to the buyer at that handover.
   Seller isA Role with name: String, org: String, dept: String;
   Buyer isA Role with name: String, org: String, dept: String;
+  // The carrier the buyer nominates; if the on-board B/L mechanism is agreed,
+  // it issues the seller a transport document with an on-board notation.
+  Carrier isA Role thirdParty with name: String, org: String, dept: String;
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
@@ -21,6 +24,15 @@ Domain fcaDomain
   ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller hands the buyer the usual proof of delivery to the carrier.
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // FCA A6/B6 optional mechanism (new in Incoterms 2020): if the parties have
+  // agreed (recorded by OnBoardBLAgreed), the buyer must instruct its carrier -
+  // at the buyer's cost and risk - to issue the seller a bill of lading with an
+  // on-board notation; the seller must then tender that document to the buyer.
+  // The carrier is not bound by the sale contract and may decline to issue.
+  OnBoardBLAgreed isAn Event with performer: Buyer, controller: Buyer;
+  BLInstructionGiven isAn Event with performer: Buyer, controller: Buyer;
+  OnBoardBLIssued isAn Event with Env blNumber: String, performer: Carrier, controller: Carrier;
+  OnBoardBLForwarded isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
   // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
@@ -43,7 +55,7 @@ Domain fcaDomain
 endDomain
 
 Contract FCA (
-  sellerP: Seller, buyerP: Buyer,
+  sellerP: Seller, buyerP: Buyer, carrierP: Carrier,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
   placeOfDelivery: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number
 )
@@ -51,6 +63,7 @@ Contract FCA (
 Declarations
   seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
   buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
+  carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   carrierNominated: CarrierNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   carrierFailedToTakeCharge: CarrierFailedToTakeCharge with performer := buyer, controller := buyer;
@@ -58,6 +71,10 @@ Declarations
   handedToCarrier: HandedToCarrier with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
+  onBoardBLAgreed: OnBoardBLAgreed with performer := buyer, controller := buyer;
+  blInstructionGiven: BLInstructionGiven with performer := buyer, controller := buyer;
+  onBoardBLIssued: OnBoardBLIssued with performer := carrier, controller := carrier;
+  onBoardBLForwarded: OnBoardBLForwarded with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
   assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
   assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
@@ -87,6 +104,15 @@ Obligations
   // with the usual proof that the goods were delivered.
   oProvideDocuments: (Happens(handedToCarrier) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(documentsProvided));
+  // B6 (optional, if agreed): the buyer instructs its carrier - at the buyer's
+  // cost and risk - to issue the seller an on-board bill of lading.
+  oInstructCarrierBL: Happens(onBoardBLAgreed) -> O(buyer, seller, true,
+              Happens(blInstructionGiven));
+  // A6 (optional): once the carrier has issued the on-board B/L, the seller
+  // tenders it to the buyer (typically through the banking chain). The carrier
+  // is not bound by the sale contract, so issuance is a third-party event.
+  oForwardOnBoardBL: Happens(onBoardBLIssued) -> O(seller, buyer, true,
+              Happens(onBoardBLForwarded));
   // B4/B10: the buyer nominates the carrier and gives sufficient notice in time.
   oNominateCarrier: O(buyer, seller, true, WhappensBefore(carrierNominated, carrierNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are with the carrier.
@@ -138,7 +164,9 @@ ACPolicy with Controller seller
   Rule1: Grant read To buyer On goods.description by seller;
   Rule2: Grant read To buyer On obligations.oDeliver by seller;
   Rule3: Grant read To buyer On handedToCarrier by seller;
-  Rule4: Grant write To buyer On powers.pTerminateByBuyer by seller;
+  Rule4: Grant read To seller On onBoardBLIssued by carrier;
+  Rule5: Grant read To buyer On onBoardBLForwarded by seller;
+  Rule6: Grant write To buyer On powers.pTerminateByBuyer by seller;
 
 Constraints
   not(IsEqual(buyer, seller));

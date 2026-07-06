@@ -17,6 +17,9 @@ Domain fobDomain
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller places the goods on board the nominated vessel (risk passes).
   LoadedOnBoard isAn Event with port: String, Env onBoardDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // A2 alternative performance: the seller may instead procure goods already
+  // so delivered (string sales, common in commodity chains).
+  ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Carrier issues the bill of lading once the goods are on board.
   BillOfLadingIssued isAn Event with Env blNumber: String, performer: Carrier, controller: Carrier;
   // Seller hands the buyer the usual proof of delivery (the bill of lading).
@@ -42,6 +45,7 @@ Declarations
   vesselNominated: VesselNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   loadedOnBoard: LoadedOnBoard with port := portOfShipment, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   billOfLadingIssued: BillOfLadingIssued with performer := carrier, controller := carrier;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
@@ -52,25 +56,28 @@ Preconditions
 
 Obligations
   // A7: the seller clears the goods for export before they go on board.
-  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, loadedOnBoard));
+  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, loadedOnBoard)
+              or ShappensBefore(exportCleared, procuredSoDelivered));
   // A2 delivery: once the buyer has nominated the vessel, the seller must place
-  // the goods on board it, at the named loading point, before the deadline.
+  // the goods on board it, at the named loading point, before the deadline
+  // - or procure goods already so delivered (string sales).
   oDeliver: Happens(vesselNominated) -> O(seller, buyer, true,
-              WhappensBefore(loadedOnBoard, loadedOnBoard.delDueDate)
-              and loadedOnBoard.port == vesselNominated.loadingPort);
+              (WhappensBefore(loadedOnBoard, loadedOnBoard.delDueDate)
+              and loadedOnBoard.port == vesselNominated.loadingPort)
+              or WhappensBefore(procuredSoDelivered, loadedOnBoard.delDueDate));
   // A6: after loading, the carrier issues the bill of lading and the seller
   // provides the buyer with that proof of delivery.
-  oProvideDocuments: Happens(loadedOnBoard) -> O(seller, buyer, true,
+  oProvideDocuments: (Happens(loadedOnBoard) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(billOfLadingIssued) and Happens(documentsProvided));
   // B4/B10: the buyer nominates the vessel and gives sufficient notice in time.
   oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are on board.
-  oTakeDelivery: Happens(loadedOnBoard) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  oTakeDelivery: (Happens(loadedOnBoard) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered on board and evidenced
   // by the bill of lading; this survives termination of the contract.
-  oPay: (Happens(loadedOnBoard) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
+  oPay: ((Happens(loadedOnBoard) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
 
 Powers

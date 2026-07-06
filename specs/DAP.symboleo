@@ -13,6 +13,9 @@ Domain dapDomain
   CarriageContracted isAn Event with destinationPlace: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
   // Delivery: seller makes the goods available at the destination, ready for unloading (risk passes).
   MadeAvailableAtDestination isAn Event with place: String, Env arrivalDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // A2 alternative performance: the seller may instead procure goods already
+  // so delivered (string sales, common in commodity chains).
+  ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller gives the buyer the document/notice letting it take delivery at destination.
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
@@ -34,6 +37,7 @@ Declarations
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
   madeAvailable: MadeAvailableAtDestination with place := placeOfDestination, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
@@ -43,27 +47,30 @@ Preconditions
 
 Obligations
   // A7: the seller clears the goods for export before they are dispatched.
-  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, madeAvailable));
+  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, madeAvailable)
+              or ShappensBefore(exportCleared, procuredSoDelivered));
   // A4: the seller contracts carriage to the named destination, at its own cost, in time.
   oContractCarriage: O(seller, buyer, true,
               WhappensBefore(carriageContracted, carriageContracted.dueDate)
               and carriageContracted.destinationPlace == placeOfDestination);
   // A2 delivery: the seller places the goods at the buyer's disposal, ready for
   // unloading, at the named place of destination before the deadline; risk passes there.
+  // Alternatively the seller procures goods already so delivered (string sales).
   oDeliver: O(seller, buyer, true,
-              WhappensBefore(madeAvailable, madeAvailable.delDueDate)
-              and madeAvailable.place == placeOfDestination);
+              (WhappensBefore(madeAvailable, madeAvailable.delDueDate)
+              and madeAvailable.place == placeOfDestination)
+              or WhappensBefore(procuredSoDelivered, madeAvailable.delDueDate));
   // A6: the seller provides the buyer with the document/notice that lets it take
   // delivery of the goods at the named place of destination.
-  oProvideDocuments: Happens(madeAvailable) -> O(seller, buyer, true,
+  oProvideDocuments: (Happens(madeAvailable) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(documentsProvided));
   // B2: the buyer takes delivery of the goods once they are at the destination.
-  oTakeDelivery: Happens(madeAvailable) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  oTakeDelivery: (Happens(madeAvailable) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered at the destination and evidenced
   // by the usual proof of delivery; this survives termination of the contract.
-  oPay: (Happens(madeAvailable) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
+  oPay: ((Happens(madeAvailable) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
 
 Powers

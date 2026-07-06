@@ -148,6 +148,12 @@ class Profile:
         return self.term_type == "F"
 
     @property
+    def has_string_sale(self) -> bool:
+        # A2 of every rule except EXW lets the seller alternatively "procure
+        # goods so delivered" (string sales, common in commodity chains).
+        return self.term_type != "E"
+
+    @property
     def has_seller_carriage(self) -> bool:
         # C-terms (carriage to destination) and D-terms (delivery at destination
         # requires it) both put carriage on the seller.
@@ -525,6 +531,12 @@ def emit_domain(c: RuleConfig) -> list[str]:
         p.delivery_domain_comment,
         f"  {p.delivery_event} isAn Event with {p.delivery_place_attr}: String, Env {p.delivery_date_attr}: Date, delDueDate: Date, performer: Seller, controller: Seller;",
     ]
+    if p.has_string_sale:
+        L += [
+            "  // A2 alternative performance: the seller may instead procure goods already",
+            "  // so delivered (string sales, common in commodity chains).",
+            "  ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;",
+        ]
     if p.has_bol:
         L += [
             "  // Carrier issues the bill of lading once the goods are on board.",
@@ -581,6 +593,8 @@ def emit_declarations(c: RuleConfig) -> list[str]:
     L += [
         f"  {p.delivery_var}: {p.delivery_event} with {p.delivery_place_attr} := {p.delivery_place_param}, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;",
     ]
+    if p.has_string_sale:
+        L += ["  procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;"]
     if p.has_bol:
         L += ["  billOfLadingIssued: BillOfLadingIssued with performer := carrier, controller := carrier;"]
     if p.has_documents:
@@ -598,11 +612,23 @@ def emit_preconditions(c: RuleConfig) -> list[str]:
 
 def emit_obligations(c: RuleConfig) -> list[str]:
     p = c.profile
+    # In string-sale rules, delivery may occur as physical delivery OR as
+    # procurement of goods already so delivered; orderings and triggers that
+    # key on "delivery" must accept either event.
+    delivered = (
+        f"(Happens({p.delivery_var}) or Happens(procuredSoDelivered))"
+        if p.has_string_sale else f"Happens({p.delivery_var})"
+    )
     L = ["Obligations"]
     if p.has_export_clearance:
+        before = (
+            f"ShappensBefore(exportCleared, {p.delivery_var})\n"
+            f"              or ShappensBefore(exportCleared, procuredSoDelivered)"
+            if p.has_string_sale else f"ShappensBefore(exportCleared, {p.delivery_var})"
+        )
         L += [
             f"  // A7: the seller clears the goods for export before {p.export_before_phrase}.",
-            f"  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, {p.delivery_var}));",
+            f"  oExportClearance: O(seller, buyer, true, {before});",
         ]
     if p.has_seller_carriage:
         L += [
@@ -612,24 +638,46 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             f"              and carriageContracted.{p.carriage_dest_attr} == {p.dest_param});",
         ]
     if p.has_import_clearance:
+        before = (
+            f"ShappensBefore(importCleared, {p.delivery_var})\n"
+            f"              or ShappensBefore(importCleared, procuredSoDelivered)"
+            if p.has_string_sale else f"ShappensBefore(importCleared, {p.delivery_var})"
+        )
         L += [
             "  // A7 (DDP): the seller also clears the goods for import before delivery at destination.",
-            f"  oImportClearance: O(seller, buyer, true, ShappensBefore(importCleared, {p.delivery_var}));",
+            f"  oImportClearance: O(seller, buyer, true, {before});",
         ]
     if p.has_insurance:
+        before = (
+            f"ShappensBefore(insuranceObtained, {p.delivery_var})\n"
+            f"              or ShappensBefore(insuranceObtained, procuredSoDelivered)"
+            if p.has_string_sale else f"ShappensBefore(insuranceObtained, {p.delivery_var})"
+        )
         L += [
             f"  // A5: the seller takes out cargo insurance (min. {p.insurance_cover_phrase}, 110% of price) for the buyer.",
-            f"  oInsure: O(seller, buyer, true, ShappensBefore(insuranceObtained, {p.delivery_var}));",
+            f"  oInsure: O(seller, buyer, true, {before});",
         ]
     if p.has_nomination:
         L += [
             f"  // A2 delivery: once the buyer has nominated the {p.transport_noun}, the seller must place",
-            f"  // the goods {p.deliver_place_phrase}, at the named {p.nomination_place_word}, before the deadline.",
+            f"  // the goods {p.deliver_place_phrase}, at the named {p.nomination_place_word}, before the deadline",
+            "  // - or procure goods already so delivered (string sales).",
             f"  oDeliver: Happens({p.nomination_var}) -> O(seller, buyer, true,",
-            f"              WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
-            f"              and {p.delivery_var}.{p.delivery_place_attr} == {p.nomination_var}.{p.nomination_place_attr});",
+            f"              (WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
+            f"              and {p.delivery_var}.{p.delivery_place_attr} == {p.nomination_var}.{p.nomination_place_attr})",
+            f"              or WhappensBefore(procuredSoDelivered, {p.delivery_var}.delDueDate));",
         ]
-    else:  # C/D/E-term: unconditional delivery at the delivery point
+    elif p.has_string_sale:  # C/D-term: unconditional delivery, procurement alternative
+        L += [
+            p.c_deliver_comment[0],
+            p.c_deliver_comment[1],
+            "  // Alternatively the seller procures goods already so delivered (string sales).",
+            "  oDeliver: O(seller, buyer, true,",
+            f"              (WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
+            f"              and {p.delivery_var}.{p.delivery_place_attr} == {p.delivery_place_param})",
+            f"              or WhappensBefore(procuredSoDelivered, {p.delivery_var}.delDueDate));",
+        ]
+    else:  # E-term (EXW): unconditional delivery at the seller's premises, no string sale
         L += [
             p.c_deliver_comment[0],
             p.c_deliver_comment[1],
@@ -641,14 +689,14 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         L += [
             "  // A6: after loading, the carrier issues the bill of lading and the seller",
             p.provide_docs_line2,
-            f"  oProvideDocuments: Happens({p.delivery_var}) -> O(seller, buyer, true,",
+            f"  oProvideDocuments: {delivered} -> O(seller, buyer, true,",
             "              Happens(billOfLadingIssued) and Happens(documentsProvided));",
         ]
     elif p.has_documents:
         L += [
             p.proof_docs_comment[0],
             p.proof_docs_comment[1],
-            f"  oProvideDocuments: Happens({p.delivery_var}) -> O(seller, buyer, true,",
+            f"  oProvideDocuments: {delivered} -> O(seller, buyer, true,",
             "              Happens(documentsProvided));",
         ]
     if p.has_nomination:
@@ -658,7 +706,7 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         ]
     L += [
         f"  // B2: the buyer takes delivery of the goods once they are {p.take_phrase}.",
-        f"  oTakeDelivery: Happens({p.delivery_var}) -> O(buyer, seller, true, Happens(goodsTakenOver));",
+        f"  oTakeDelivery: {delivered} -> O(buyer, seller, true, Happens(goodsTakenOver));",
     ]
     return L
 
@@ -666,11 +714,15 @@ def emit_obligations(c: RuleConfig) -> list[str]:
 def emit_surviving(c: RuleConfig) -> list[str]:
     p = c.profile
     evidence = p.pay_evidence or ("the bill of lading" if p.has_bol else "the usual proof of delivery")
+    delivered = (
+        f"(Happens({p.delivery_var}) or Happens(procuredSoDelivered))"
+        if p.has_string_sale else f"Happens({p.delivery_var})"
+    )
     return [
         "Surviving Obligations",
         f"  // B1: the buyer must pay the price for goods delivered {p.point_phrase} and evidenced",
         f"  // by {evidence}; this survives termination of the contract.",
-        f"  oPay: (Happens({p.delivery_var}) and Happens({p.pay_second_conjunct})) -> Obligation(buyer, seller, true,",
+        f"  oPay: ({delivered} and Happens({p.pay_second_conjunct})) -> Obligation(buyer, seller, true,",
         "              WhappensBefore(paid, paid.payDueDate) and paid.amount == price);",
     ]
 

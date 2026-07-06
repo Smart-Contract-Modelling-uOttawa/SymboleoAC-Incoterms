@@ -13,6 +13,9 @@ Domain fasDomain
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller places the goods alongside the nominated vessel (risk passes).
   DeliveredAlongside isAn Event with port: String, Env alongsideDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // A2 alternative performance: the seller may instead procure goods already
+  // so delivered (string sales, common in commodity chains).
+  ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller hands the buyer the usual proof that the goods were delivered alongside.
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
@@ -34,6 +37,7 @@ Declarations
   vesselNominated: VesselNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   deliveredAlongside: DeliveredAlongside with port := portOfShipment, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
@@ -43,25 +47,28 @@ Preconditions
 
 Obligations
   // A7: the seller clears the goods for export before they are placed alongside.
-  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, deliveredAlongside));
+  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, deliveredAlongside)
+              or ShappensBefore(exportCleared, procuredSoDelivered));
   // A2 delivery: once the buyer has nominated the vessel, the seller must place
-  // the goods alongside it, at the named loading point, before the deadline.
+  // the goods alongside it, at the named loading point, before the deadline
+  // - or procure goods already so delivered (string sales).
   oDeliver: Happens(vesselNominated) -> O(seller, buyer, true,
-              WhappensBefore(deliveredAlongside, deliveredAlongside.delDueDate)
-              and deliveredAlongside.port == vesselNominated.loadingPort);
+              (WhappensBefore(deliveredAlongside, deliveredAlongside.delDueDate)
+              and deliveredAlongside.port == vesselNominated.loadingPort)
+              or WhappensBefore(procuredSoDelivered, deliveredAlongside.delDueDate));
   // A6: after delivery alongside, the seller provides the buyer with the usual
   // proof that the goods were delivered alongside the vessel.
-  oProvideDocuments: Happens(deliveredAlongside) -> O(seller, buyer, true,
+  oProvideDocuments: (Happens(deliveredAlongside) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(documentsProvided));
   // B4/B10: the buyer nominates the vessel and gives sufficient notice in time.
   oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are alongside.
-  oTakeDelivery: Happens(deliveredAlongside) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  oTakeDelivery: (Happens(deliveredAlongside) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered alongside and evidenced
   // by the usual proof of delivery; this survives termination of the contract.
-  oPay: (Happens(deliveredAlongside) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
+  oPay: ((Happens(deliveredAlongside) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
 
 Powers

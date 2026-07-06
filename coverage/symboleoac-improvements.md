@@ -72,6 +72,33 @@ capability confirmed, documentation should say so).
 | C4 | **Add a generated-JS self-check** (`node --check` over every emitted file) to the codegen pipeline, so C2-class defects fail the *compile* gate rather than surfacing at deployment. | The 0-error/0-warning gate passed while the generated CIF.js was unparseable. | proposed |
 | C5 | `getState` returns prose, `getLegalPositionStateAndTime` returns JSON — unify on JSON for machine consumption. | On-chain verification had to parse a human-oriented string. | proposed |
 | C6 | Codegen should follow the ontology state machines (see O9/O10) or expose the violation policy as a generation option. | SymboleoAC2SC#2. | filed |
+| C7 | **Extend the Xtext validator with pragmatic well-formedness rules.** The current `SymboleoValidator` (17 active checks) is strong on reference/type consistency but nearly silent on what the codegen, runtime, and blockchain *assume*; two further checks (unique AC-rule names; the permission-giver rule) sit half-written and commented out. See the tiered rule set below. | Five probes against the deployed jar (2026-07-06): an Event with **no `performer`/`controller`** compiles 0/0 and its JS parses, yet every generated trigger transaction dereferences `_controller` for the AC layer — the event is untriggerable on-chain; a domain type `Function` + a variable named `constructor` compile and parse but silently corrupt the contract object (property shadowing); duplicate `Rule1:` names are accepted; a violation-triggered obligation in the *main* section is accepted although the runtime makes it stillborn (the `oFailureCosts` trap). Only the dangling-`obligations.X` probe was correctly rejected (scoping). | proposed |
+
+**C7 — proposed validation rules, tiered for backward compatibility.**
+*Errors* (structural requirements the generated code already assumes):
+(1) every Event type declares Role-typed `performer` and `controller`;
+(2) no identifier collides with JS/Java reserved words or generated member
+names (`constructor`, `state`, `obligations`, `notified`, …);
+(3) unique AC-rule names (finish the commented-out check);
+(4) cross-namespace identifier uniqueness (variables vs domain types vs norms).
+*Warnings* (semantics traps found empirically in this corpus):
+(5) an obligation whose trigger contains `Violated(...)` should be a
+*surviving* obligation — retire once Phase 1's violation policy lands;
+(6) roles lacking the AC-required attributes (`name`/`org`/`dept`) — issue
+SymboleoAC2SC#1 as a compile-time warning instead of an on-chain
+"Unauthorized";
+(7) a deadline referencing an `Env` date attribute that may never be set
+(evaluates false forever);
+(8) arithmetic in a consequent — until C2 is fixed (pairs with C4).
+*Lints* (completeness/reachability):
+(9) finish the permission-giver check (the `by` role should be
+owner/controller/performer of the granted resource);
+(10) AC coverage — a `thirdParty` role appearing in no Grant;
+(11) dormant norms — a conditional norm whose trigger event appears nowhere
+else and has no performer path;
+(12) the validator's own TODO list: inheritance cycles, expression cycles.
+All are ordinary `@Check(FAST)` methods in one file with an existing tests
+module; warnings-first keeps every published spec compiling.
 
 ## 4. Runtime (symboleoac-js-core)
 
@@ -99,17 +126,27 @@ Ordered by leverage-per-effort; each phase ends by **re-running this corpus**
 regression benchmark, and re-scoring the coverage matrix. Expected matrix
 movement is stated per phase — that is the measurable "one iteration" claim.
 
-**Phase 0 — hygiene (days; SymboleoAC2SC + test network).**
-Fix C1/C2 in the code generator (retiring `patchCodegen`), add the C4
-generated-JS self-check, C3 dept handling, T3 network fixes.
-*Corpus effect:* none on the matrix; removes two workaround layers and makes
-the compile gate trustworthy.
+**Phase 0 — hygiene + static analysis (days; SymboleoAC-IDE/2SC + test network).**
+Fix C1/C2 in the code generator (retiring `patchCodegen`); add the C4
+generated-JS self-check; C3 dept handling; T3 network fixes; and the **C7
+validator rule set** — the error tier (Event performer/controller, reserved
+words, unique rule names, cross-namespace uniqueness) plus the warning tier
+(violation-triggered-must-survive, missing AC role attributes, unset Env
+deadlines, arithmetic-in-consequent). All are `@Check(FAST)` methods in one
+file; warnings cannot break existing specs, and the error-tier rules only
+reject specs that were already broken downstream. The toolchain for all of
+this is local and buildable (the templates live in `Symboleo2SC.xtend` /
+`SymboleoValidator.java`, and the fat jar builds from this tree).
+*Corpus effect:* none on the matrix; removes two workaround layers, makes the
+compile gate trustworthy, and moves four empirically-discovered deployment
+failures (untriggerable events, shadowed members, opaque on-chain
+"Unauthorized", stillborn reparations) to compile time.
 
 **Phase 1 — runtime semantics (weeks; js-core + codegen).**
 R4/O9: violation defers whole-contract termination when a remedial power or
 violation-triggered norm exists (or a per-contract policy flag); O10/R-side:
 honour antecedents at creation (Create until activated); R1 interval-based
-`HappensWithin`.
+`HappensWithin`. Retire the C7 warning (5) when the violation policy lands.
 *Corpus effect:* `oFailureCosts` could be a regular obligation again (though
 surviving remains the better legal reading — the paper can discuss both);
 breach scenarios can continue past a violation, so suspend→resume after a

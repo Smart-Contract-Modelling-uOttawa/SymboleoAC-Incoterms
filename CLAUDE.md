@@ -60,9 +60,12 @@ verified against the real compiler and the Xtext grammar
 - **Sections, in order:** Domain … endDomain, Contract … Declarations,
   [Preconditions], [Postconditions], Obligations, [Surviving Obligations],
   [Powers], [ACPolicy], [Constraints], endContract.
-- **Powers/ACPolicy should reference *main* obligations** via `obligations.x`;
-  whether surviving obligations are resolvable from `obligations.` is unverified —
-  avoid pointing a power at a surviving obligation until checked.
+- **Powers may reference surviving obligations** via `obligations.x` (same
+  namespace as main obligations at the syntax level): verified Wave 3 — the
+  compiler resolves it, and the generated power-exercise transaction correctly
+  routes to `contract.survivingObligations.x` (see `pRejectDocuments` →
+  `Suspended(obligations.oPay)` and its runtime test in
+  `tests/scenarios/icc-features.test.mjs`).
 - `Date.add(datePoint, n, days)` — time units: seconds|minutes|hours|days|weeks|months|years.
   `TimeGranularity is days` is optional.
 - **Roles need a `dept` attribute for access control.** Declare roles as

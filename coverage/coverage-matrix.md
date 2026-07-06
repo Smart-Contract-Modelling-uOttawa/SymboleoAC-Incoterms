@@ -18,12 +18,12 @@ FAS/any-mode proof-of-delivery vs a bill of lading), see the cross-cutting notes
 
 | Art. | Obligation | Device in SymboleoAC | EXW | FCA | CPT | CIP | DAP | DPU | DDP | FAS | FOB | CFR | CIF |
 |------|-----------|----------------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| A1 | General obligations (goods + invoice conform) | precondition / asset attributes | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| A1 | General obligations (goods + invoice conform) | `oProvideInvoice` (`InvoiceProvided`) + goods precondition — *what counts as conform* is the contract of sale's standard, outside the Incoterms rule | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | A2 | Delivery (delivery point) | `oDeliver` obligation; delivery event; **string-sale disjunct** (`or WhappensBefore(procuredSoDelivered, …)`) in all 10 non-EXW rules | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | A3 | Transfer of risks | **no first-class risk incidence**; but the *exception logic* is modelled: delivery trigger + surviving pay, plus the B3 premature-transfer limbs via `oFailureCosts` (see B3) | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | A4 | Carriage | carriage event / obligation (seller side for C/D rules); E/F transport-info duty via the assistance channel; **`oSecurityCompliance`** (2020 security duty, all but EXW; delivery-bounded for F, unbounded for C/D); the optional F-term seller-carriage ("if agreed") still unmodelled | ◐ | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ | ✅ | ✅ |
 | A5 | Insurance | CIF/CIP: `oInsure` now **checks 110% of price + contract currency** as constraints, plus `oProvideInsuranceDoc` (certificate) and the conditional War/Strikes mechanism (`oAdditionalCover` with the B5 info antecedent + `oPayAdditionalCover`); the named clause set ICC (A)/(C) stays data — hence still ◐. Info duty of the other rules via the assistance channel | ◐ | ◐ | ◐ | ◐ | — | — | — | ◐ | ◐ | ◐ | ◐ |
-| A6 | Delivery / transport document | FOB/CFR/CIF: `BillOfLading` + issuance + `oProvideDocuments`; others: `DocumentsProvided` proof; **FCA adds the optional on-board-B/L mechanism** (agree → instruct → issue → forward). C-rules' document-content requirements (dated within shipment period, negotiable ⇒ full set, sale-in-transit) unmodelled | — | ✅ | ◐ | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
+| A6 | Delivery / transport document | FOB/CFR/CIF: `BillOfLading` + issuance + `oProvideDocuments` **with content constraints** (dated within the shipment period; negotiable ⇒ full set of originals); others: `DocumentsProvided` proof; FCA adds the optional on-board-B/L mechanism. CPT/CIP's conditional document duty and *document-of-title*/sale-in-transit semantics remain the gaps | — | ✅ | ◐ | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | A7 | Export/import clearance | `oExportClearance` obligation; EXW's assistance-only A7 via the assistance channel | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | A8 | Checking / packaging / marking | `oPackage` (`PackagedAndMarked` strictly before either delivery limb); the two "unless" defeaters (unpackaged trade usage; agreed specific requirements) are recorded, not modelled — defeasibility is a language limit | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | A9 | Allocation of costs | **no cost algebra** for the 13-stage split (data only); but the *behavioural* cost heads are now norms: assistance-reimbursement legs (`oReimburse*Assist`), the B9(d) failure heads (`oFailureCosts`), and the additional-cover cost leg (`oPayAdditionalCover`) | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
@@ -38,7 +38,7 @@ FAS/any-mode proof-of-delivery vs a bill of lading), see the cross-cutting notes
 | B3 | Transfer of risks | **every rule now carries the surviving `oFailureCosts`** (guarded by `Happens(goodsIdentified)`), with its full per-rule trigger set: nomination failure + vessel/carrier failure (F-terms), B10 notice failure (`oNotifySchedule` violated — all non-F rules), B7-clearance failure (DAP/DPU), take-delivery failure (EXW). Only DDP's B7-*assistance* limb remains unmodelled; risk *incidence* stays a language gap | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | B4 | Carriage | buyer contracts carriage (F-rules) via nomination | ◐ | ✅ | — | — | — | — | — | ✅ | ✅ | — | — |
 | B5 | Insurance | no buyer insurance *obligation*; the CIP/CIF additional-cover info and DAP/DPU/DDP insurance-info duties via the to-seller assistance channel | — | — | — | ◐ | ◐ | ◐ | ◐ | — | — | — | ◐ |
-| B6 | Proof of delivery | document events exist; **FCA's B6 instruct-the-carrier limb modelled** (`oInstructCarrierBL`); buyer *acceptance/rejection* (and EXW's buyer-provided evidence) unmodelled | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| B6 | Proof of delivery | acceptance/rejection **modelled**: `pRejectDocuments` — non-conforming documents (Env `conforming`) empower the buyer to suspend the *surviving* payment until a conforming tender; FCA adds the instruct-the-carrier limb. EXW's buyer-provided evidence of taking delivery remains unmodelled | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | B7 | Export/import clearance | first-class buyer clearance everywhere the ICC assigns it: `oImportClearanceBuyer` (transit+import; F/C rules and DAP/DPU, where its violation is also the B3(a) trigger) and EXW's `oClearanceBuyer` (export+transit+import — the mirror extreme of DDP); B7(a)/DDP assistance limbs via the to-seller channel ("where applicable" is a comment-level qualifier) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ✅ | ✅ | ✅ | ✅ |
 | B8 | Checking / packaging / marking | Incoterms 2020 B8 imposes **no buyer obligation** in any rule ("Inspection" was the 2010 numbering) | — | — | — | — | — | — | — | — | — | — | — |
 | B9 | Allocation of costs | see A9; the B9(d) failure heads are **modelled** as the surviving `oFailureCosts` for the six rules with a modelled trigger (see B3) | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
@@ -59,6 +59,18 @@ FAS/any-mode proof-of-delivery vs a bill of lading), see the cross-cutting notes
   delivery escapes `oPay`, whereas the official B3/B9 provisos make it bear
   risk and additional costs from the agreed date (see the failure-proviso
   finding below).
+- **2026-07-06 Wave 3 (co-evolution probes + modelling).** A1 invoice ×11; A6
+  content constraints for the B/L rules (dated-within-period as a temporal
+  predicate; negotiable ⇒ full-set as an implication-shaped disjunction); DPU's
+  arrival-before-unloaded-delivery sequencing (`oUnload`, procurement
+  discharges it); and B6's acceptance duty as the **`pRejectDocuments` power
+  suspending the surviving `oPay`** — which also *verified* that powers may
+  target surviving obligations end to end (compiler resolution + generated
+  exercise transaction + runtime cycle), retiring the old "unverified"
+  caution. Deliberately NOT modelled, with the language gap recorded in
+  `symboleoac-improvements.md`: the B10→A2 deadline cascade (needs
+  conditional/default expressions — an or-of-deadlines would loosen, not
+  override) and DDP's B7-assistance B3 limb (needs event-relative deadlines).
 - **2026-07-05 Wave 1 (post-audit modelling).** Four ICC features moved from
   gap to device, each CI-tested end-to-end (118 scenario/structural tests):
   1. *String sales* — `ProcuredSoDelivered` as a genuine alternative-performance

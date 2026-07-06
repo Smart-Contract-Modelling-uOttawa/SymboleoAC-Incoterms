@@ -7,10 +7,27 @@ Domain cptDomain
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
+  // B10 (conditional): the parties may agree that the buyer is entitled to
+  // determine the time and/or point of delivery (recorded by ScheduleRightAgreed);
+  // the buyer must then give sufficient notice in time.
+  ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;
+  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  // A8: the seller checks (quality, weight, count), packages and marks the goods
+  // appropriately for transport, at its own cost - unless unpackaged carriage is
+  // usual for the trade or the parties agreed specific packaging requirements
+  // (the two ICC defeaters are recorded here, not modelled).
+  PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
   // Seller clears the goods for export.
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Seller contracts carriage to the named destination (and pays the freight).
   CarriageContracted isAn Event with destinationPlace: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities - licences, security clearance, pre-shipment
+  // inspection, duties - in time for delivery/receipt.
+  ImportClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;
+  // A4 (2020): the seller complies with transport-related security requirements
+  // for the transport to the destination.
+  SecurityComplied isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller hands the goods to the first carrier it contracted (risk passes on handover).
   HandedToFirstCarrier isAn Event with place: String, Env handoverDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // A2 alternative performance: the seller may instead procure goods already
@@ -18,6 +35,10 @@ Domain cptDomain
   ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller tenders the buyer the usual transport document for the carriage.
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // A10: the seller gives the buyer the notice it needs to receive the goods -
+  // for the F-terms a dual notice: that the goods have been delivered, or that
+  // the nominated vessel/carrier failed to take them within the time agreed.
+  DeliveryNoticeGiven isAn Event with Env subject: String, performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
   // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
@@ -30,6 +51,11 @@ Domain cptDomain
   AssistanceToSellerRequested isAn Event with Env topic: String, performer: Seller, controller: Seller;
   AssistanceToSellerProvided isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
   AssistanceToSellerReimbursed isAn Event with Env amount: Number, performer: Seller, controller: Seller;
+  // The goods are clearly identified (appropriated) as the contract goods -
+  // the ICC proviso guarding every premature risk/cost transfer (B3/B9).
+  GoodsIdentified isAn Event with performer: Seller, controller: Seller;
+  // B9(d): the buyer bears the additional costs caused by its (or its nominee's) failure.
+  AdditionalCostsPaid isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
   // Buyer pays the price.
   Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
 endDomain
@@ -37,18 +63,24 @@ endDomain
 Contract CPT (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDelivery: String, placeOfDestination: String, effDate: Date, carriageDays: Number, deliveryDays: Number, paymentDays: Number
+  placeOfDelivery: String, placeOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
 )
 
 Declarations
   seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
   buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
+  scheduleRightAgreed: ScheduleRightAgreed with performer := buyer, controller := buyer;
+  scheduleNotified: ScheduleNotified with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
+  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
+  importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
+  securityComplied: SecurityComplied with performer := seller, controller := seller;
   handedToFirstCarrier: HandedToFirstCarrier with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
+  deliveryNoticeGiven: DeliveryNoticeGiven with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
   assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
   assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
@@ -56,15 +88,24 @@ Declarations
   assistanceToSellerRequested: AssistanceToSellerRequested with performer := seller, controller := seller;
   assistanceToSellerProvided: AssistanceToSellerProvided with performer := buyer, controller := buyer;
   assistanceToSellerReimbursed: AssistanceToSellerReimbursed with performer := seller, controller := seller;
+  goodsIdentified: GoodsIdentified with performer := seller, controller := seller;
+  additionalCostsPaid: AdditionalCostsPaid with performer := buyer, controller := buyer;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
 
 Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A8: checking, packaging and marking precede delivery.
+  oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, handedToFirstCarrier)
+              or ShappensBefore(packagedAndMarked, procuredSoDelivered));
   // A7: the seller clears the goods for export before they are handed to the carrier.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, handedToFirstCarrier)
               or ShappensBefore(exportCleared, procuredSoDelivered));
+  // A4 (2020): the seller complies with transport-security requirements for
+  // the transport to the destination (beyond the origin delivery event, so
+  // not bounded by it).
+  oSecurityCompliance: O(seller, buyer, true, Happens(securityComplied));
   // A4: the seller contracts carriage to the named destination, at its own cost, in time.
   oContractCarriage: O(seller, buyer, true,
               WhappensBefore(carriageContracted, carriageContracted.dueDate)
@@ -80,6 +121,18 @@ Obligations
   // carriage it has contracted to the destination.
   oProvideDocuments: (Happens(handedToFirstCarrier) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(documentsProvided));
+  // A10: the seller notifies the buyer that the goods have been delivered and
+  // gives any notice the buyer needs to receive the goods.
+  oNotifyDelivery: (Happens(handedToFirstCarrier) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
+              Happens(deliveryNoticeGiven));
+  // B10 (conditional): once it is agreed that the buyer may determine the
+  // time and/or point of delivery, the buyer must give sufficient notice in
+  // time; its failure is a B3/B9(d) premature-transfer trigger.
+  oNotifySchedule: Happens(scheduleRightAgreed) -> O(buyer, seller, true,
+              WhappensBefore(scheduleNotified, scheduleNotified.dueDate));
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities in time.
+  oImportClearanceBuyer: O(buyer, seller, true, WhappensBefore(importClearedByBuyer, importClearedByBuyer.dueDate));
   // B2: the buyer takes delivery of the goods once they are with the carrier.
   oTakeDelivery: (Happens(handedToFirstCarrier) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
   // At the buyer's request, risk and cost, the seller provides assistance with:
@@ -103,6 +156,14 @@ Surviving Obligations
   // by the usual proof of delivery; this survives termination of the contract.
   oPay: ((Happens(handedToFirstCarrier) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+  // B3/B9(d): if the buyer fails to give the agreed B10 notice in time,
+  // the buyer bears the resulting additional costs - the rules' premature
+  // risk/cost transfer, guarded by the ICC proviso that the goods have been
+  // clearly identified as the contract goods. A surviving obligation: like
+  // the payment above, it outlives termination caused by the very failure
+  // that triggered it.
+  oFailureCosts: Happens(Violated(obligations.oNotifySchedule)) ->
+              Obligation(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Powers
   // If the seller fails to contract carriage to the destination, the buyer may terminate.

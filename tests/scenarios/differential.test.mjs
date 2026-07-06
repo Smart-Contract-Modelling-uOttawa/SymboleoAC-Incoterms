@@ -19,8 +19,9 @@ const INSURED = new Set(['CIF', 'CIP']);
 const src = Object.fromEntries(ALL.map((c) => [c, readFileSync(path.join(SPECS, `${c}.symboleo`), 'utf8')]));
 const has = (code, re) => re.test(src[code]);
 
-test('structural: every spec has the universal norms (deliver, take, pay)', () => {
+test('structural: every spec has the universal norms (package, deliver, take, pay)', () => {
   for (const c of ALL) {
+    assert.ok(has(c, /^\s*oPackage:/m), `${c}: missing oPackage (A8)`);
     assert.ok(has(c, /^\s*oDeliver:/m), `${c}: missing oDeliver`);
     assert.ok(has(c, /^\s*oTakeDelivery:/m), `${c}: missing oTakeDelivery`);
     assert.ok(has(c, /^\s*oPay:/m), `${c}: missing surviving oPay`);
@@ -33,6 +34,12 @@ test('differential: seller insurance obligation iff CIF/CIP', () => {
   for (const c of ALL) {
     assert.equal(has(c, /^\s*oInsure:/m), INSURED.has(c), `${c}: oInsure presence`);
     assert.equal(has(c, /^\s*pTerminateNoInsurance:/m), INSURED.has(c), `${c}: pTerminateNoInsurance`);
+    // Wave 2: the 110%-of-price / contract-currency constraints, the
+    // policy/certificate obligation, and the War/Strikes conditional.
+    assert.equal(has(c, /oInsure:[\s\S]*?insuredAmount >= 1\.1 \* price/), INSURED.has(c), `${c}: 110% constraint`);
+    assert.equal(has(c, /^\s*oProvideInsuranceDoc:/m), INSURED.has(c), `${c}: oProvideInsuranceDoc`);
+    assert.equal(has(c, /^\s*oAdditionalCover:/m), INSURED.has(c), `${c}: oAdditionalCover`);
+    assert.equal(has(c, /^\s*oPayAdditionalCover:/m), INSURED.has(c), `${c}: oPayAdditionalCover`);
   }
 });
 
@@ -81,23 +88,47 @@ test('differential: string-sale alternative (procuredSoDelivered) iff not EXW', 
 });
 
 test('differential: B3/B9(d) failure provisos match the yaml b3_triggers', () => {
-  const WITH_FAILURE = new Set(['EXW', 'FCA', 'FAS', 'FOB', 'DAP', 'DPU']);
+  // Since Wave 2 every rule has at least one modelled B3/B9(d) limb.
   for (const c of ALL) {
-    assert.equal(has(c, /^\s*oFailureCosts:/m), WITH_FAILURE.has(c), `${c}: oFailureCosts presence`);
-    if (WITH_FAILURE.has(c)) {
-      assert.ok(has(c, /oFailureCosts:[\s\S]*?Happens\(goodsIdentified\)/),
-        `${c}: oFailureCosts must be guarded by the goods-identified proviso`);
-    }
+    assert.ok(has(c, /^\s*oFailureCosts:/m), `${c}: oFailureCosts presence`);
+    assert.ok(has(c, /oFailureCosts:[\s\S]*?Happens\(goodsIdentified\)/),
+      `${c}: oFailureCosts must be guarded by the goods-identified proviso`);
     // Third-party failure events: vessel for FAS/FOB, carrier for FCA.
     assert.equal(has(c, /VesselFailedToLoad isAn Event/), c === 'FAS' || c === 'FOB', `${c}: VesselFailedToLoad`);
     assert.equal(has(c, /CarrierFailedToTakeCharge isAn Event/), c === 'FCA', `${c}: CarrierFailedToTakeCharge`);
   }
 });
 
-test('differential: buyer-side import clearance iff DAP/DPU (B3(a) trigger)', () => {
+test('differential: A10 notice in every rule; conditional B10 schedule notice iff non-F', () => {
   for (const c of ALL) {
-    assert.equal(has(c, /^\s*oImportClearanceBuyer:/m), c === 'DAP' || c === 'DPU',
+    assert.ok(has(c, /^\s*oNotifyDelivery:/m), `${c}: missing oNotifyDelivery (A10)`);
+    assert.equal(has(c, /^\s*oNotifySchedule:/m), !F_TERMS.has(c), `${c}: oNotifySchedule presence`);
+    // The F-terms' A10 is the dual delivered-or-failed notice.
+    if (F_TERMS.has(c)) {
+      assert.ok(has(c, /oNotifyDelivery: \([\s\S]*?or Happens\((vesselFailedToLoad|carrierFailedToTakeCharge)\)\)/),
+        `${c}: oNotifyDelivery must carry the dual failure limb`);
+    }
+  }
+});
+
+test('differential: buyer-side clearance follows the ICC allocation', () => {
+  for (const c of ALL) {
+    // Every rule whose import clearance the ICC table assigns to the buyer
+    // (all but DDP and EXW) has the first-class buyer obligation; EXW's buyer
+    // instead clears everything (export/transit/import).
+    assert.equal(has(c, /^\s*oImportClearanceBuyer:/m), c !== 'DDP' && c !== 'EXW',
       `${c}: oImportClearanceBuyer presence`);
+    assert.equal(has(c, /^\s*oClearanceBuyer:/m), c === 'EXW', `${c}: oClearanceBuyer presence`);
+  }
+});
+
+test('differential: A4 security compliance in every rule except EXW', () => {
+  for (const c of ALL) {
+    assert.equal(has(c, /^\s*oSecurityCompliance:/m), c !== 'EXW', `${c}: oSecurityCompliance presence`);
+    // B10 notified content includes transport-security requirements.
+    if (c !== 'EXW') {
+      assert.ok(has(c, /Env securityRequirements: String/), `${c}: securityRequirements notice content`);
+    }
   }
 });
 

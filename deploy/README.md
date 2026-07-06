@@ -188,6 +188,51 @@ Application-API does:
   right party. (Note it currently hard-codes a `fabric-network-2.2.2` layout and
   macOS paths that must be pointed at your network.)
 
+## 5. Verified: a full authorized happy path from the CLI (Wave 2 redeploy)
+
+On 2026-07-06 the **Wave-2 FOB** (string sales, B3/B9(d) failure provisos,
+assistance channels, notices, packaging, security compliance, buyer clearance)
+was redeployed as `fob` **version 4.0 / sequence 4** on the same network, and —
+going beyond the original deployment, which stopped at the unauthorized-access
+check — a **complete happy path was driven on-chain from the `peer` CLI**, with
+no need for the Application-API:
+
+1. **Enroll role identities with the CA directly.** For each party, register
+   and enroll with the role attributes as `ecert` attrs, then give the MSP the
+   NodeOU config:
+
+   ```bash
+   export FABRIC_CA_CLIENT_HOME=$PWD/organizations/peerOrganizations/org1.example.com/
+   fabric-ca-client register --caname ca-org1 --id.name sellerid --id.secret pw \
+     --id.type client --tls.certfiles organizations/fabric-ca/org1/tls-cert.pem \
+     --id.attrs 'HF.name=seller:ecert,HF.role=Seller:ecert,organization=AcmeCo:ecert,department=sales:ecert'
+   fabric-ca-client enroll -u https://sellerid:pw@localhost:7054 --caname ca-org1 \
+     --enrollment.attrs 'HF.name,HF.role,organization,department' \
+     -M .../users/seller@org1.example.com/msp --tls.certfiles .../tls-cert.pem
+   cp .../users/Admin@org1.example.com/msp/config.yaml .../users/seller@org1.example.com/msp/
+   ```
+
+   (Same for `buyer`/`Buyer`/`BuyCo`/`procurement` and `carrier`/`Carrier`/
+   `CarrCo`/`ops` — the attribute values must equal the role parameters passed
+   to `init`.)
+
+2. **`init` as the seller** returns
+   `{"successful":true,"contractId":"FOB_<timestamp>"}` (the same call as the
+   plain Admin returns `Unauthorized: Unknown access` — both AC layers work).
+
+3. **Drive the trace with the right party per event** by switching
+   `CORE_PEER_MSPCONFIGPATH` per invoke: buyer `trigger_vesselNominated`
+   (with `loadingPort`), seller `trigger_packagedAndMarked`,
+   `trigger_securityComplied`, `trigger_exportCleared`, buyer
+   `trigger_importClearedByBuyer`, seller `trigger_loadedOnBoard`, carrier
+   `trigger_billOfLadingIssued`, seller `trigger_documentsProvided`,
+   `trigger_deliveryNoticeGiven`, buyer `trigger_goodsTakenOver`,
+   `trigger_paid` — all eleven returned `{"successful":true}`.
+
+4. **`getState`** then reports every obligation (incl. the surviving `oPay`) at
+   `Fulfillment` and `Contract state: SuccessfulTermination` — the on-chain
+   mirror of the local scenario suite's happy path.
+
 ## Toolchain issues encountered (summary)
 
 | # | Symptom | Root cause | Fix |

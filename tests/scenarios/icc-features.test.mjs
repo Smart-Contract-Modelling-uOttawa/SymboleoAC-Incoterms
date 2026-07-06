@@ -64,6 +64,10 @@ const FAILURES = [
   { code: 'DAP', pre: [], violate: 'oImportClearanceBuyer' },
   { code: 'DPU', pre: [], violate: 'oImportClearanceBuyer' },
   { code: 'EXW', pre: [{ event: 'goodsMadeAvailable' }], violate: 'oTakeDelivery' },
+  // B10-notice limb (non-F rules): the buyer was given the right to determine
+  // the delivery schedule, then failed to give the agreed notice in time.
+  ...['EXW', 'CPT', 'CIP', 'CFR', 'CIF', 'DAP', 'DPU', 'DDP'].map((code) => (
+    { code, pre: [{ event: 'scheduleRightAgreed' }], violate: 'oNotifySchedule' })),
 ];
 
 for (const FCASE of FAILURES) {
@@ -128,6 +132,55 @@ for (const R of RULES) {
     } else {
       assert.equal(c.assistanceToSellerRequested, undefined, `${R.code}: unexpected to-seller channel`);
     }
+  });
+}
+
+// --- B10 schedule notice: the compliant path (agree -> notify in time) --------
+for (const code of ['CPT', 'DDP', 'EXW']) {
+  test(`${code}: B10 schedule notice fulfilled (agree -> notify)`, () => {
+    const R = byCode[code];
+    const rule = loadRule(genDir, code);
+    const c = makeContract(rule, R.ctor(effNow()));
+    fire(rule, c, 'scheduleRightAgreed');
+    assert.ok(c.obligations.oNotifySchedule != null, `${code}: oNotifySchedule not created`);
+    fire(rule, c, 'scheduleNotified', { chosenPoint: 'Gate 4', securityRequirements: 'ISPS' });
+    assert.ok(c.obligations.oNotifySchedule.isFulfilled(),
+      `${code}: oNotifySchedule = ${c.obligations.oNotifySchedule.state}`);
+  });
+}
+
+// --- goods identified only AFTER the failure (late antecedent activation) -----
+for (const code of ['FOB', 'FAS']) {
+  test(`${code}: oFailureCosts antecedent activates when goods are identified late`, () => {
+    const R = byCode[code];
+    const rule = loadRule(genDir, code);
+    const c = makeContract(rule, R.ctor(effNow()));
+    fire(rule, c, 'vesselFailedToLoad', { reason: 'failed to arrive' }); // no violation: contract stays alive
+    const o = c.survivingObligations.oFailureCosts;
+    assert.ok(o != null, `${code}: oFailureCosts not created`);
+    fire(rule, c, 'goodsIdentified');          // the proviso is satisfied afterwards
+    fire(rule, c, 'additionalCostsPaid', { amount: 99 });
+    assert.ok(o.isFulfilled(), `${code}: oFailureCosts = ${o.state}`);
+  });
+}
+
+// --- CIP/CIF additional War/Strikes cover (A5/B5/B9) --------------------------
+for (const code of ['CIF', 'CIP']) {
+  test(`${code}: additional cover (request -> info -> obtain -> pay)`, () => {
+    const R = byCode[code];
+    const rule = loadRule(genDir, code);
+    const c = makeContract(rule, R.ctor(effNow()));
+    assert.equal(c.obligations.oAdditionalCover, undefined, 'dormant before the buyer requires it');
+    fire(rule, c, 'additionalCoverRequested', { clauses: 'War/Strikes' });
+    assert.ok(c.obligations.oAdditionalCover != null, `${code}: oAdditionalCover not created`);
+    fire(rule, c, 'additionalCoverInfoGiven');   // the B5 information precondition
+    fire(rule, c, 'additionalCoverObtained', { policyNumber: 'WS-7' });
+    assert.ok(c.obligations.oAdditionalCover.isFulfilled(),
+      `${code}: oAdditionalCover = ${c.obligations.oAdditionalCover.state}`);
+    assert.ok(c.obligations.oPayAdditionalCover != null, `${code}: oPayAdditionalCover not created`);
+    fire(rule, c, 'additionalCoverPaid', { amount: 200 });
+    assert.ok(c.obligations.oPayAdditionalCover.isFulfilled(),
+      `${code}: oPayAdditionalCover = ${c.obligations.oPayAdditionalCover.state}`);
   });
 }
 

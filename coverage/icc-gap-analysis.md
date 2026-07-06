@@ -191,20 +191,24 @@ suggested keys `b3_triggers`, `transit_clearance`, `assistance`,
   FAS/FOB, local-insurance caveat for CIP/CIF) — rule-*selection* guidance is
   outside any single contract's formalization; worth one paragraph.
 
-## 4. Suggested wave plan
+## 4. Wave plan and status
 
-- **Wave 0 (correctness, hours):** fix matrix B8 row; re-score or implement the
-  phantom-device cells (B7/A8/A10); fix the wrong "—" cells; fix or restate the
-  35/38 powers claim; reconcile abstract "cannot" vs matrix ◐ (introduce real ❌
-  cells or soften).
-- **Wave 1 (highest-value modelling):** yaml schema keys + templates for B3/B9
-  failure provisos with third-party failure events (item 1), the
-  assistance/reimbursement pair (item 2), string-sales disjunct (item 3), FCA
-  B/L mechanism (item 4). Extend scenario suite accordingly (incl. one breach
-  per power per rule to make the powers claim true, and vessel-failure traces).
-- **Wave 2 (breadth):** buyer clearance + transit category (5), security thread
-  (6), A8 obligation (7), A10 notices (8), dynamic deadlines + notice content
-  (9), insurance sub-obligations (10).
-- **Wave 3 (paper):** §5 re-grading with the language-limit vs modelling-choice
-  distinction; §7 reframing of A3/B3 (exception logic expressible); add §2/§7
-  material from section 3 above.
+- **Wave 0 (DONE, PR #2):** matrix B8 row fixed; phantom-device cells re-scored
+  with the new ⬜ mark; wrong "—" cells fixed; powers claim corrected.
+- **Wave 1 (DONE, PR #2):** B3/B9 failure provisos with third-party failure
+  events (surviving `oFailureCosts`), assistance/reimbursement pair,
+  string-sales disjunct, FCA on-board B/L. Tests 44→118, all 38 powers created.
+- **Wave 2 (DONE, PR #3):** A8 packaging (item 7), A10/B10 notices (item 8 —
+  incl. the F-terms' dual notice, and the notice-limb B3 triggers that give all
+  11 rules `oFailureCosts`), insurance sub-obligations with checked 110%/currency
+  constraints (item 10), buyer clearance breadth incl. EXW's full-clearance
+  mirror of DDP (item 5), and the security thread (item 6). Tests →130. A third
+  upstream codegen defect (arithmetic in consequents breaks the LegalSituation
+  metadata builder) patched in the harness.
+- **Remaining (Wave 3 candidates):** dynamic B10→A2 deadline (buyer-selected
+  date feeding the delivery deadline — needs cross-event date references in
+  deadlines, unverified in the grammar); A6 document-content constraints
+  (dated-within-period, negotiable ⇒ full set, sale-in-transit polarity); B6
+  buyer acceptance/rejection power; A1 commercial invoice; FCA's two delivery
+  modes; DPU unload-then-deliver sequencing; per-article (rather than
+  consolidated) assistance obligations; DDP's B7-assistance B3 limb.

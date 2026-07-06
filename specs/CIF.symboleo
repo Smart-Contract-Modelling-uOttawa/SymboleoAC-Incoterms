@@ -252,7 +252,8 @@ ACPolicy with Controller seller
   Rule4: Grant read To buyer On insuranceObtained by seller;
   Rule5: Grant read To seller On billOfLadingIssued by carrier;
   Rule6: Grant write To carrier On billOfLading.blNumber by seller;
-  Rule7: Grant write To buyer On powers.pTerminateByBuyer by seller;
+  Rule7: Grant transfer To buyer On billOfLading by seller;
+  Rule8: Grant write To buyer On powers.pTerminateByBuyer by seller;
 
 Constraints
   not(IsEqual(buyer, seller));

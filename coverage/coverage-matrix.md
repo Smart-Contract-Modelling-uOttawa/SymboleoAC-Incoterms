@@ -59,6 +59,14 @@ FAS/any-mode proof-of-delivery vs a bill of lading), see the cross-cutting notes
   delivery escapes `oPay`, whereas the official B3/B9 provisos make it bear
   risk and additional costs from the agreed date (see the failure-proviso
   finding below).
+- **2026-07-06 Wave 3 addendum (corrected ontology source).** The authoritative
+  SymboleoAC ontology (`SymboleoAC-JS-Core/ontology/SymboleoAC.ump`) has a full
+  AC layer whose `transfer` action and `Revoke` decision the corpus had never
+  exercised; probes confirmed the grammar accepts both, and the B/L rules'
+  ACPolicy now grants the buyer **`transfer` rights over the bill of lading** —
+  the endorsability/document-of-title device A6 was missing (runtime
+  enforcement of transfer is the next upstream probe; see
+  `symboleoac-improvements.md` O4b).
 - **2026-07-06 Wave 3 (co-evolution probes + modelling).** A1 invoice ×11; A6
   content constraints for the B/L rules (dated-within-period as a temporal
   predicate; negotiable ⇒ full-set as an implication-shaped disjunction); DPU's

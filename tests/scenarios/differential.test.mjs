@@ -45,6 +45,9 @@ test('differential: Wave-3 devices sit exactly where the ICC text puts them', ()
     // A6 content constraints only where a carrier bill of lading exists.
     assert.equal(has(c, /billOfLadingIssued\.negotiable == false or billOfLadingIssued\.originalsCount >= 3/),
       c === 'FOB' || c === 'CFR' || c === 'CIF', `${c}: A6 content constraint`);
+    // A6 document-of-title: transfer rights over the B/L granted to the buyer.
+    assert.equal(has(c, /Grant transfer To buyer On billOfLading by seller/),
+      c === 'FOB' || c === 'CFR' || c === 'CIF', `${c}: B/L transfer grant`);
   }
 });
 

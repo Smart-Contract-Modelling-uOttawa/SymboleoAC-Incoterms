@@ -1210,6 +1210,10 @@ def emit_acpolicy(c: RuleConfig) -> list[str]:
         rules += [
             "read To seller On billOfLadingIssued by carrier",
             "write To carrier On billOfLading.blNumber by seller",
+            # A6 document-of-title: the buyer receives TRANSFER rights over the
+            # bill of lading - the AC ontology's transfer action standing in for
+            # the negotiable document's endorsability (sale in transit).
+            "transfer To buyer On billOfLading by seller",
         ]
     else:  # proof-only rules: buyer reads the delivery event
         rules.append(f"read To buyer On {p.delivery_var} by seller")

@@ -9,9 +9,22 @@ corpus (the KONTEX story: the corpus is both the *consumer* of the stack and its
 *regression benchmark*).
 
 Layers, as deployed:
-`ontology (Symboleo-JS-Core/ontology: Symboleo.ecore + ontology.ump)` →
+`ontology (SymboleoAC-JS-Core/ontology/SymboleoAC.ump — the Symboleo core + the Access Control extension)` →
 `grammar + compiler (SymboleoAC2SC, Xtext)` → `runtime (symboleoac-js-core)` →
 `tooling (SymboleoAC-Web IDE + bridge, Application-API, Fabric test network)`.
+
+> **Provenance note — itself a finding (O4d).** The first version of this
+> assessment analyzed `Symboleo-JS-Core/ontology/ontology.ump`, the *plain
+> Symboleo* ontology in the sibling repository, and wrongly concluded that the
+> ontology had no access-control concepts. The authoritative model,
+> `SymboleoAC-JS-Core/ontology/SymboleoAC.ump`, embeds a copy of the core
+> ontology and extends it with a full AC layer (`Resource`, `Policy`, `Rule`
+> with `Grant/Revoke` × `read/write/all/transfer`, `Operation`, `Attribute`,
+> `DataTransfer`, `StateTransition`, `AbstractEvent`). The two files share
+> their Contract/Obligation/Power state machines verbatim — so every
+> state-machine finding below holds for both — but they are related by
+> copy-and-extend, not module reuse: exactly the divergence hazard that misled
+> the assessment, and that O4d proposes to fix.
 
 Status codes: **filed** (upstream issue exists) · **patched** (worked around in
 this repo) · **proposed** (new here) · **verified-works** (positive finding —
@@ -19,19 +32,22 @@ capability confirmed, documentation should say so).
 
 ---
 
-## 1. Ontology (Symboleo.ecore / ontology.ump)
+## 1. Ontology (SymboleoAC.ump)
 
 | ID | Finding / proposal | Evidence from the corpus | Status |
 |----|--------------------|--------------------------|--------|
 | O1 | **First-class `Risk`**: a transferable, insurable object attached to an `Asset`, transferring at a delivery `Event`. | A3/B3 of all 11 rules is modelled only structurally (surviving payment + `oFailureCosts`); "who bears the loss if the goods are damaged at time *t*" is unstatable. The one systematic ◐ the waves never improved. | proposed |
 | O2 | **`Cost` concept + allocation algebra**: typed cost stages, a party-boundary, aggregation. | The 13-stage ICC cost table is carried as YAML data; A9/B9 heads conditioned on *another contract's* terms ("unless for the seller's account under the contract of carriage") are unstatable. | proposed |
-| O3 | **`Document` concept**: evidence/title/negotiability/transferability as ontology citizens, not ad-hoc events+attributes. | A6 needed `BillOfLading` (asset) + issuance/tender/forward events + `negotiable`/`originalsCount`/`conforming` Env attributes spread across three constructs; *document of title* and sale-in-transit-by-transfer remain inexpressible. | proposed |
-| O4 | **Lift access control into the ontology.** The ecore/ump model has *no* AC concepts — `ACPolicy`/`Grant`/read/write/`dept` exist only in the grammar and runtime. Align with RBAC (roles ↔ permissions ↔ resources) and make `dept` (or a general attribute set) part of `Role`. | The on-chain deployment showed AC is a *load-bearing* differentiator (authenticate + per-event grants enforced per transaction), yet the conceptual model cannot even represent it; the `dept` requirement had to be discovered empirically (issue SymboleoAC2SC#1). | proposed |
-| O5 | **Party/Role/third-party alignment.** The ontology has `Party` (with `performerOf`/`liableOf`/`rightHolder`) distinct from `Role`; the surface language exposes only role instances, plus a `thirdParty` keyword the ontology lacks. A *third-party beneficiary* concept is missing entirely. | The FOB/FCA carrier is grammar-`thirdParty` with no ontology counterpart; CIP/CIF's "the buyer may claim directly from the insurer" (a right against a non-party) is a defensible ❌ today. `rightHolder` looks like the natural hook. | proposed |
+| O3 | **`Document` concept**: evidence/title/negotiability as ontology citizens, not ad-hoc events+attributes. | A6 needed `BillOfLading` (asset) + issuance/tender/forward events + `negotiable`/`originalsCount`/`conforming` Env attributes spread across three constructs. *Endorsability* turned out to be expressible with the AC ontology's own `transfer` action (see O4b) — the specs now grant the buyer `transfer` rights over the B/L — but a document-of-title *semantics* (holder-of-the-document = right-to-the-goods) still has no home. | proposed |
+| O4a | **Conceptualize the identity→role authentication mapping.** In SymboleoAC.ump, `Role` has *no attributes*; the runtime's `authenticate` matches four certificate fields (`HF.name`/`HF.role`/`organization`/`department`) against role data — classic RBAC user-assignment, implemented but not modelled. | The `dept` requirement had to be discovered empirically on-chain ("Unauthorized" with no modelled reason; issue SymboleoAC2SC#1); the CLI enrollment recipe in deploy/README.md §5 encodes knowledge that belongs in the ontology (a `Credential`/assignment concept). | proposed |
+| O4b | **Surface and exercise the ontology's full AC vocabulary.** `Rule` supports `Grant/Revoke` × `read/write/all/transfer`; the grammar accepts all of them (probe-verified) — yet the corpus, the group's examples, and the docs only ever use `Grant read/write`. `transfer` is exactly the negotiable-document primitive the trade domain needs; `Revoke` gives negative authorization (e.g. cutting a carrier's access after termination). Document them, give them runtime semantics tests, and add codegen/Fabric transactions that *exercise* a transfer. | Wave-3 probes: `Grant transfer To buyer On billOfLading`, `Revoke read`, `Grant all` all compile 0/0; the B/L rules' ACPolicy now records the buyer's transfer right as the endorsability device (A6). Whether js-core *enforces* transfer/Revoke is untested — the next probe target. | verified-works (grammar) / proposed (runtime) |
+| O4c | **Ontology-internal quality pass.** `Operation.preCondition/postCondition` are typed `Condition` — a type declared nowhere in the ump; association names carry typos (`LegalPositionStateEven`, `ruleAccesseor`, `inputAttributs/outputAttributs`). | Direct reading of SymboleoAC.ump. Cosmetic, but this is the conceptual model of record for a journal-published language. | proposed |
+| O4d | **Modularize the two ontologies + provenance.** SymboleoAC.ump embeds a copy of the plain-Symboleo ontology rather than importing it; the sibling repo (`Symboleo-JS-Core/ontology`, with the Ecore/EMF model and diagrams) still hosts the old version with no derivation note; the AC extension has **no Ecore/EMF model at all** (ump only), so the published class diagrams show pre-AC Symboleo. | This assessment's own v1 mistake: the stale sibling ontology is the one a reader finds first. Umple supports mixins/traits for exactly this composition. | proposed |
+| O5 | **Party/Role/third-party alignment.** The ontology has `Party` (with `performerOf`/`liableOf`/`rightHolder`) distinct from `Role`; the surface language exposes only role instances, plus a `thirdParty` keyword the ontology lacks (the AC extension adds `Event.performer: Role`, aligning event performers, but the third-party notion itself is still grammar-only). A *third-party beneficiary* concept is missing entirely. | The FOB/FCA carrier is grammar-`thirdParty` with no ontology counterpart; CIP/CIF's "the buyer may claim directly from the insurer" (a right against a non-party) is a defensible ❌ today. `rightHolder` looks like the natural hook. | proposed |
 | O6 | **Expose sub-contracts in the surface language.** `Contract.parentContract/subContracts` exists in the ontology with *no grammar counterpart*. | The ICC text repeatedly conditions on the carriage contract's terms; the "network of contracts" (carriage, insurance, L/C) is the domain's structure. The concept is already modelled — only the syntax is missing. | proposed |
 | O7 | **Make the reparation pattern explicit.** `Obligation.surviving` is a bare Boolean; nothing says *violation-triggered reparations must be surviving to survive the violation they respond to*. Consider a `Reparation` specialization or a well-formedness rule. | `oFailureCosts` (B9(d)) was stillborn as a regular obligation — created and instantly swept by the violation-triggered contract termination; moving it to Surviving Obligations was both the fix and the semantically right reading. Only execution revealed this. | proposed |
 | O8 | **Operations on `TimePoint`/`TimeInterval`.** Both are contentless classes; there is no event-time arithmetic. | DDP's B7-assistance B3 limb needs "within *N* days of the request" — a deadline relative to an event occurrence — inexpressible; only `Date.add` over contract parameters exists. | proposed |
-| O9 | **Contract state machine: codegen deviates from the ontology.** In ontology.ump, a contract reaches `UnsuccessfulTermination` only via `terminated` (a power's exercise). The generated runtime unsuccessfully terminates the whole contract *the moment any obligation is violated*, killing the remedial powers the violation just created. | Filed as SymboleoAC2SC#2 with reproduction; forced the surviving-reparation workaround (O7) and reshaped the suspend/resume test design. The ontology is right; the codegen should follow it (or make the policy configurable). | filed |
+| O9 | **Contract state machine: codegen deviates from the ontology.** In SymboleoAC.ump (identically in the core ontology), a contract reaches `UnsuccessfulTermination` only via `terminated` (a power's exercise). The generated runtime unsuccessfully terminates the whole contract *the moment any obligation is violated*, killing the remedial powers the violation just created. | Filed as SymboleoAC2SC#2 with reproduction; forced the surviving-reparation workaround (O7) and reshaped the suspend/resume test design. The ontology is right; the codegen should follow it (or make the policy configurable). | filed |
 | O10 | **Obligation state machine: antecedent bypassed at creation.** Ontology: `triggeredConditional → Create --activated--> InEffect`. Codegen: `trigerredUnconditional()` is called for every new instance, so an obligation with an unsatisfied antecedent is already InEffect. | `oFailureCosts`' goods-identification proviso and `oAdditionalCover`'s information precondition are enforced only by a separate activate-listener; firing the antecedent event *before* creation works by accident of ordering. | proposed |
 
 ## 2. Language / grammar
@@ -44,7 +60,7 @@ capability confirmed, documentation should say so).
 | L4 | **Event-relative deadlines** (see O8) — surface form: `Date.add(eventVar, n, days)` where `eventVar`'s occurrence time is meant. | DDP B7-assistance limb; also the natural form for "reimburse within N days of assistance". | proposed |
 | L5 | **Module/include mechanism.** | "Shared ontology" across the 11 specs means the generator inlines identical text; 2,000+ spec LOC are ~60% repetition the language cannot factor. | proposed |
 | L6 | **Vague-standard annotations** ("sufficient", "customary", "usual route", "in the manner customary at the port") — perhaps a named-standard reference resolvable by an oracle/expert at runtime. | A10/B10's "sufficient notice", A4's carriage-quality terms, FAS/FOB's port-custom manner: all approximated by deadlines or dropped; the qualifier is *lost*, not just weakened. | proposed |
-| L7 | **Positive findings to document as supported** (currently absent from any reference doc): `or` in triggers and consequents; arithmetic (`1.1 * price`) and enum/Boolean comparison in propositions; **Boolean contract parameters**; **cross-event attribute references incl. Env dates as deadline points**; **powers targeting surviving obligations** (`Suspended(obligations.oPay)` compiles, and the generated exercise transaction routes to `survivingObligations` correctly — verified end to end in the B6 rejection cycle, test-covered). | Waves 1–3 probe results; the last one replaces a long-standing "unverified, avoid" note in this repo's CLAUDE.md. | verified-works |
+| L7 | **Positive findings to document as supported** (currently absent from any reference doc): `or` in triggers and consequents; arithmetic (`1.1 * price`) and enum/Boolean comparison in propositions; **Boolean contract parameters**; **cross-event attribute references incl. Env dates as deadline points**; **powers targeting surviving obligations** (`Suspended(obligations.oPay)` compiles, and the generated exercise transaction routes to `survivingObligations` correctly — verified end to end in the B6 rejection cycle, test-covered); **the full AC rule vocabulary** — `Grant transfer`, `Revoke`, `Grant all` all parse and compile (see O4b). | Waves 1–3 probe results; the surviving-power one replaces a long-standing "unverified, avoid" note in this repo's CLAUDE.md. | verified-works |
 
 ## 3. Compiler / code generator (SymboleoAC2SC)
 
@@ -107,15 +123,23 @@ B10→A2 dynamic deadline modelled faithfully (upgrading A2/B10 fidelity for all
 F-terms); DDP's last unmodelled B3 limb closes — every premature-transfer limb
 of the standard would then be first-class.
 
-**Phase 3 — ontology alignment (months; ontology + grammar).**
-O4 RBAC concepts into the ontology (the SymboleoAC extension becomes
-conceptually grounded, not just implemented); O7 `Reparation`; O5 third-party
-beneficiary via `rightHolder`; O6 surface syntax for sub-contract references;
-L5 modules.
-*Corpus effect:* the insurer direct-claim (A5) and the
-cost-heads-conditioned-on-the-carriage-contract (A9/B9) become expressible;
-the generator's inlined "shared ontology" becomes a real module; spec LOC
-drops substantially.
+**Phase 3 — ontology↔stack alignment (months; ontology + grammar + runtime).**
+The AC ontology is *richer than its implementation and its users*: close that
+gap in both directions. Downward: give the ontology's `transfer` and `Revoke`
+runtime semantics and Fabric transactions (today only `Grant read/write` are
+exercised anywhere), and probe/test `Grant all`; conceptualize the
+identity→role authentication mapping that `authenticate` implements (O4a —
+`dept` stops being folklore); fix the internal quality items (O4c: undeclared
+`Condition`, association typos). Sideways: modularize the core-vs-AC ontology
+pair (O4d, Umple mixins) and produce an EMF/diagram model of the AC extension
+so the published class diagrams match the deployed language. Upward: O7
+`Reparation`; O5 third-party beneficiary via `rightHolder`; O6 surface syntax
+for sub-contract references; L5 modules.
+*Corpus effect:* B/L endorsement becomes an *executable* transfer (upgrading
+the A6 document-of-title story from a recorded grant to enforced semantics);
+the insurer direct-claim (A5) and the cost-heads-conditioned-on-the-
+carriage-contract (A9/B9) become expressible; the generator's inlined "shared
+ontology" becomes a real module; spec LOC drops substantially.
 
 **Phase 4 — research extensions (the JURIX agenda).**
 O1 risk, O2 cost algebra, L3 defeasibility, L6 vague standards.

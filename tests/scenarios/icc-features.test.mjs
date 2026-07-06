@@ -184,6 +184,31 @@ for (const code of ['CIF', 'CIP']) {
   });
 }
 
+// --- B6 document rejection: suspend the surviving payment ---------------------
+// Verifies the Wave-3 finding that powers may target SURVIVING obligations
+// end to end: non-conforming documents create pRejectDocuments; exercising it
+// suspends oPay; a conforming re-tender resumes it; payment then fulfils.
+test('FOB: non-conforming documents -> pRejectDocuments suspends surviving oPay, then resume and pay', () => {
+  const R = byCode.FOB;
+  const rule = loadRule(genDir, 'FOB');
+  const c = makeContract(rule, R.ctor(effNow()));
+  const idx = R.happy.findIndex((e) => e.event === 'documentsProvided');
+  for (const { event, attrs } of R.happy.slice(0, idx)) fire(rule, c, event, attrs);
+  fire(rule, c, 'documentsProvided', { conforming: false });
+  assert.ok(c.powers.pRejectDocuments != null, 'pRejectDocuments not created');
+  const oPay = c.survivingObligations.oPay;
+  assert.ok(oPay != null, 'surviving oPay not created (delivery + documents happened)');
+  // The buyer exercises the rejection power (harness stands in for the
+  // p_pRejectDocuments_suspended_o_oPay Fabric transaction).
+  oPay.suspended();
+  assert.ok(oPay.isSuspended(), `oPay = ${oPay.state}, expected Suspension`);
+  // Conforming documents arrive; the buyer resumes payment and pays.
+  oPay.resumed();
+  assert.ok(!oPay.isSuspended(), 'oPay still suspended after resume');
+  for (const { event, attrs } of R.happy.slice(idx + 1)) fire(rule, c, event, attrs);
+  assert.ok(oPay.isFulfilled(), `oPay = ${oPay.state}, expected Fulfillment`);
+});
+
 // --- FCA on-board B/L mechanism ----------------------------------------------
 test('FCA: on-board B/L mechanism (agree -> instruct -> issue -> forward)', () => {
   const R = byCode.FCA;

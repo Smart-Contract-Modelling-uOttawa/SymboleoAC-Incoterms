@@ -19,14 +19,35 @@ const INSURED = new Set(['CIF', 'CIP']);
 const src = Object.fromEntries(ALL.map((c) => [c, readFileSync(path.join(SPECS, `${c}.symboleo`), 'utf8')]));
 const has = (code, re) => re.test(src[code]);
 
-test('structural: every spec has the universal norms (package, deliver, take, pay)', () => {
+test('structural: every spec has the universal norms (invoice, package, deliver, take, pay)', () => {
   for (const c of ALL) {
+    assert.ok(has(c, /^\s*oProvideInvoice:/m), `${c}: missing oProvideInvoice (A1)`);
     assert.ok(has(c, /^\s*oPackage:/m), `${c}: missing oPackage (A8)`);
     assert.ok(has(c, /^\s*oDeliver:/m), `${c}: missing oDeliver`);
     assert.ok(has(c, /^\s*oTakeDelivery:/m), `${c}: missing oTakeDelivery`);
     assert.ok(has(c, /^\s*oPay:/m), `${c}: missing surviving oPay`);
     assert.ok(has(c, /^\s*pTerminateByBuyer:/m), `${c}: missing pTerminateByBuyer`);
     assert.ok(has(c, /^\s*pTerminateBySeller:/m), `${c}: missing pTerminateBySeller`);
+  }
+});
+
+test('differential: Wave-3 devices sit exactly where the ICC text puts them', () => {
+  for (const c of ALL) {
+    // DPU is the only rule where the seller unloads (arrival precedes delivery).
+    assert.equal(has(c, /^\s*oUnload:/m), c === 'DPU', `${c}: oUnload presence`);
+    assert.equal(has(c, /ArrivedAtDestination isAn Event/), c === 'DPU', `${c}: ArrivedAtDestination`);
+    // B6 rejection power (suspends the surviving payment) wherever documents exist.
+    assert.equal(has(c, /^\s*pRejectDocuments:/m), c !== 'EXW', `${c}: pRejectDocuments presence`);
+    if (c !== 'EXW') {
+      assert.ok(has(c, /pRejectDocuments:[\s\S]*?Suspended\(obligations\.oPay\)/),
+        `${c}: pRejectDocuments must target the surviving oPay`);
+    }
+    // A6 content constraints only where a carrier bill of lading exists.
+    assert.equal(has(c, /billOfLadingIssued\.negotiable == false or billOfLadingIssued\.originalsCount >= 3/),
+      c === 'FOB' || c === 'CFR' || c === 'CIF', `${c}: A6 content constraint`);
+    // A6 document-of-title: transfer rights over the B/L granted to the buyer.
+    assert.equal(has(c, /Grant transfer To buyer On billOfLading by seller/),
+      c === 'FOB' || c === 'CFR' || c === 'CIF', `${c}: B/L transfer grant`);
   }
 });
 

@@ -125,6 +125,9 @@ class Profile:
     # (A6/B6): if agreed, the buyer instructs its carrier - at the buyer's cost
     # and risk - to issue the seller an on-board B/L; the seller tenders it on.
     has_onboard_bl: bool = False
+    # DPU only: the arrival event that must strictly precede the unloaded
+    # delivery (DPU is the only rule where the seller unloads).
+    has_arrival: bool = False
     has_export_clearance: bool = True   # False for EXW (buyer clears export)
     has_documents: bool = True          # False for EXW (no seller document norm)
     has_import_clearance: bool = False  # True for DDP (seller clears import)
@@ -472,7 +475,7 @@ _SPECIFICS = {
             "  // A2 delivery: the seller unloads the goods from the arriving means of transport",
             "  // and places them at the buyer's disposal at the destination before the deadline.",
         ],
-        has_carrier=False, has_bol=False, has_insurance=False,
+        has_carrier=False, has_bol=False, has_insurance=False, has_arrival=True,
     ),
     "DDP": dict(
         term_type="D", family="any_mode",
@@ -606,6 +609,9 @@ def emit_domain(c: RuleConfig) -> list[str]:
             f"  {ev} isAn Event with Env reason: String, performer: Buyer, controller: Buyer;",
         ]
     L += [
+        "  // A1: the seller provides the commercial invoice (and any other evidence of",
+        "  // conformity the contract of sale requires) in conformity with the contract.",
+        "  InvoiceProvided isAn Event with performer: Seller, controller: Seller;",
         "  // A8: the seller checks (quality, weight, count), packages and marks the goods",
         "  // appropriately for transport, at its own cost - unless unpackaged carriage is",
         "  // usual for the trade or the parties agreed specific packaging requirements",
@@ -664,6 +670,12 @@ def emit_domain(c: RuleConfig) -> list[str]:
             "  AdditionalCoverObtained isAn Event with Env policyNumber: String, performer: Seller, controller: Seller;",
             "  AdditionalCoverPaid isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;",
         ]
+    if p.has_arrival:
+        L += [
+            "  // DPU only: the goods arrive at the destination on the means of transport;",
+            "  // the seller must then unload them - delivery IS the unloaded state.",
+            "  ArrivedAtDestination isAn Event with performer: Seller, controller: Seller;",
+        ]
     L += [
         p.delivery_domain_comment,
         f"  {p.delivery_event} isAn Event with {p.delivery_place_attr}: String, Env {p.delivery_date_attr}: Date, delDueDate: Date, performer: Seller, controller: Seller;",
@@ -676,13 +688,17 @@ def emit_domain(c: RuleConfig) -> list[str]:
         ]
     if p.has_bol:
         L += [
-            "  // Carrier issues the bill of lading once the goods are on board.",
-            "  BillOfLadingIssued isAn Event with Env blNumber: String, performer: Carrier, controller: Carrier;",
+            "  // Carrier issues the bill of lading once the goods are on board. A6 content",
+            "  // requirements: negotiable form implies a full set of originals (customarily",
+            "  // three); the issuance must fall within the shipment period (see oProvideDocuments).",
+            "  BillOfLadingIssued isAn Event with Env blNumber: String, Env negotiable: Boolean, Env originalsCount: Number, performer: Carrier, controller: Carrier;",
         ]
     if p.has_documents:
         L += [
             p.documents_domain_comment,
-            "  DocumentsProvided isAn Event with performer: Seller, controller: Seller;",
+            "  // The Env conforming flag records whether the tendered documents are in",
+            "  // conformity with the contract (B6: the buyer must accept them iff they are).",
+            "  DocumentsProvided isAn Event with Env conforming: Boolean, performer: Seller, controller: Seller;",
         ]
     if p.has_onboard_bl:
         L += [
@@ -769,7 +785,10 @@ def emit_declarations(c: RuleConfig) -> list[str]:
     if p.third_party_failure:
         ev, var = p.third_party_failure
         L += [f"  {var}: {ev} with performer := buyer, controller := buyer;"]
-    L += ["  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;"]
+    L += [
+        "  invoiceProvided: InvoiceProvided with performer := seller, controller := seller;",
+        "  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;",
+    ]
     if p.has_export_clearance:
         L += ["  exportCleared: ExportCleared with performer := seller, controller := seller;"]
     if p.has_seller_carriage:
@@ -791,6 +810,8 @@ def emit_declarations(c: RuleConfig) -> list[str]:
             "  additionalCoverObtained: AdditionalCoverObtained with performer := seller, controller := seller;",
             "  additionalCoverPaid: AdditionalCoverPaid with performer := buyer, controller := buyer;",
         ]
+    if p.has_arrival:
+        L += ["  arrivedAtDestination: ArrivedAtDestination with performer := seller, controller := seller;"]
     L += [
         f"  {p.delivery_var}: {p.delivery_event} with {p.delivery_place_attr} := {p.delivery_place_param}, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;",
     ]
@@ -854,6 +875,9 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         if p.has_string_sale else f"ShappensBefore(packagedAndMarked, {p.delivery_var})"
     )
     L += [
+        "  // A1: the seller provides the commercial invoice in conformity with the",
+        "  // contract of sale (what counts as conform is the sale contract's standard).",
+        "  oProvideInvoice: O(seller, buyer, true, Happens(invoiceProvided));",
         "  // A8: checking, packaging and marking precede delivery.",
         f"  oPackage: O(seller, buyer, true, {pack_before});",
     ]
@@ -953,12 +977,24 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             f"              WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
             f"              and {p.delivery_var}.{p.delivery_place_attr} == {p.delivery_place_param});",
         ]
+    if p.has_arrival:
+        L += [
+            "  // DPU sequencing: arrival at the destination strictly precedes the unloaded",
+            "  // delivery - the seller's unloading duty, unique to DPU among the 11 rules",
+            "  // (procuring goods already so delivered discharges it: they arrive unloaded).",
+            f"  oUnload: O(seller, buyer, true, ShappensBefore(arrivedAtDestination, {p.delivery_var})",
+            "              or Happens(procuredSoDelivered));",
+        ]
     if p.has_documents and p.has_bol:
         L += [
             "  // A6: after loading, the carrier issues the bill of lading and the seller",
             p.provide_docs_line2,
+            "  // Content requirements: dated within the shipment period; if negotiable,",
+            "  // a full set of originals (customarily three) must be tendered.",
             f"  oProvideDocuments: {delivered} -> O(seller, buyer, true,",
-            "              Happens(billOfLadingIssued) and Happens(documentsProvided));",
+            "              Happens(billOfLadingIssued) and Happens(documentsProvided)",
+            f"              and WhappensBefore(billOfLadingIssued, {p.delivery_var}.delDueDate)",
+            "              and (billOfLadingIssued.negotiable == false or billOfLadingIssued.originalsCount >= 3));",
         ]
     elif p.has_documents:
         L += [
@@ -1138,6 +1174,15 @@ def emit_powers(c: RuleConfig) -> list[str]:
             "  // If the seller fails to clear the goods for import, the buyer may terminate.",
             "  pTerminateNoImportClearance: Happens(Violated(obligations.oImportClearance)) -> P(buyer, seller, true, Terminated(self));",
         ]
+    if p.has_documents:
+        L += [
+            "  // B6: the buyer must accept conforming documents - so when the tendered",
+            "  // documents are NOT in conformity with the contract, the buyer may suspend",
+            "  // the (surviving) payment obligation until conforming documents arrive.",
+            "  // Verified: powers may target surviving obligations (compiler + codegen).",
+            "  pRejectDocuments: Happens(documentsProvided) ->",
+            "              P(buyer, seller, documentsProvided.conforming == false, Suspended(obligations.oPay));",
+        ]
     L += [
         f"  // If the seller fails to deliver {p.point_phrase}, the buyer may terminate the contract.",
         "  pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));",
@@ -1165,6 +1210,10 @@ def emit_acpolicy(c: RuleConfig) -> list[str]:
         rules += [
             "read To seller On billOfLadingIssued by carrier",
             "write To carrier On billOfLading.blNumber by seller",
+            # A6 document-of-title: the buyer receives TRANSFER rights over the
+            # bill of lading - the AC ontology's transfer action standing in for
+            # the negotiable document's endorsability (sale in transit).
+            "transfer To buyer On billOfLading by seller",
         ]
     else:  # proof-only rules: buyer reads the delivery event
         rules.append(f"read To buyer On {p.delivery_var} by seller")

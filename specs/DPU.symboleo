@@ -12,6 +12,9 @@ Domain dpuDomain
   // the buyer must then give sufficient notice in time.
   ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;
   ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  // A1: the seller provides the commercial invoice (and any other evidence of
+  // conformity the contract of sale requires) in conformity with the contract.
+  InvoiceProvided isAn Event with performer: Seller, controller: Seller;
   // A8: the seller checks (quality, weight, count), packages and marks the goods
   // appropriately for transport, at its own cost - unless unpackaged carriage is
   // usual for the trade or the parties agreed specific packaging requirements
@@ -28,13 +31,18 @@ Domain dpuDomain
   // A4 (2020): the seller complies with transport-related security requirements
   // for the transport to the destination.
   SecurityComplied isAn Event with performer: Seller, controller: Seller;
+  // DPU only: the goods arrive at the destination on the means of transport;
+  // the seller must then unload them - delivery IS the unloaded state.
+  ArrivedAtDestination isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller unloads the goods and makes them available at the destination (risk passes).
   UnloadedAtDestination isAn Event with place: String, Env unloadDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // A2 alternative performance: the seller may instead procure goods already
   // so delivered (string sales, common in commodity chains).
   ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller gives the buyer the document/notice letting it take delivery at destination.
-  DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // The Env conforming flag records whether the tendered documents are in
+  // conformity with the contract (B6: the buyer must accept them iff they are).
+  DocumentsProvided isAn Event with Env conforming: Boolean, performer: Seller, controller: Seller;
   // A10: the seller gives the buyer the notice it needs to receive the goods -
   // for the F-terms a dual notice: that the goods have been delivered, or that
   // the nominated vessel/carrier failed to take them within the time agreed.
@@ -72,11 +80,13 @@ Declarations
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   scheduleRightAgreed: ScheduleRightAgreed with performer := buyer, controller := buyer;
   scheduleNotified: ScheduleNotified with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
+  invoiceProvided: InvoiceProvided with performer := seller, controller := seller;
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
   importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
   securityComplied: SecurityComplied with performer := seller, controller := seller;
+  arrivedAtDestination: ArrivedAtDestination with performer := seller, controller := seller;
   unloadedAtDestination: UnloadedAtDestination with place := placeOfDestination, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
@@ -96,6 +106,9 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A1: the seller provides the commercial invoice in conformity with the
+  // contract of sale (what counts as conform is the sale contract's standard).
+  oProvideInvoice: O(seller, buyer, true, Happens(invoiceProvided));
   // A8: checking, packaging and marking precede delivery.
   oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, unloadedAtDestination)
               or ShappensBefore(packagedAndMarked, procuredSoDelivered));
@@ -117,6 +130,11 @@ Obligations
               (WhappensBefore(unloadedAtDestination, unloadedAtDestination.delDueDate)
               and unloadedAtDestination.place == placeOfDestination)
               or WhappensBefore(procuredSoDelivered, unloadedAtDestination.delDueDate));
+  // DPU sequencing: arrival at the destination strictly precedes the unloaded
+  // delivery - the seller's unloading duty, unique to DPU among the 11 rules
+  // (procuring goods already so delivered discharges it: they arrive unloaded).
+  oUnload: O(seller, buyer, true, ShappensBefore(arrivedAtDestination, unloadedAtDestination)
+              or Happens(procuredSoDelivered));
   // A6: the seller provides the buyer with the document/notice that lets it take
   // delivery of the goods at the named place of destination.
   oProvideDocuments: (Happens(unloadedAtDestination) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
@@ -168,6 +186,12 @@ Surviving Obligations
 Powers
   // If the seller fails to contract carriage to the destination, the buyer may terminate.
   pTerminateNoCarriage: Happens(Violated(obligations.oContractCarriage)) -> P(buyer, seller, true, Terminated(self));
+  // B6: the buyer must accept conforming documents - so when the tendered
+  // documents are NOT in conformity with the contract, the buyer may suspend
+  // the (surviving) payment obligation until conforming documents arrive.
+  // Verified: powers may target surviving obligations (compiler + codegen).
+  pRejectDocuments: Happens(documentsProvided) ->
+              P(buyer, seller, documentsProvided.conforming == false, Suspended(obligations.oPay));
   // If the seller fails to deliver at the destination, the buyer may terminate the contract.
   pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));
   // If the buyer fails to take delivery, the seller may terminate the contract.

@@ -12,6 +12,9 @@ Domain ddpDomain
   // the buyer must then give sufficient notice in time.
   ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;
   ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  // A1: the seller provides the commercial invoice (and any other evidence of
+  // conformity the contract of sale requires) in conformity with the contract.
+  InvoiceProvided isAn Event with performer: Seller, controller: Seller;
   // A8: the seller checks (quality, weight, count), packages and marks the goods
   // appropriately for transport, at its own cost - unless unpackaged carriage is
   // usual for the trade or the parties agreed specific packaging requirements
@@ -32,7 +35,9 @@ Domain ddpDomain
   // so delivered (string sales, common in commodity chains).
   ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller gives the buyer the document/notice letting it take delivery at destination.
-  DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // The Env conforming flag records whether the tendered documents are in
+  // conformity with the contract (B6: the buyer must accept them iff they are).
+  DocumentsProvided isAn Event with Env conforming: Boolean, performer: Seller, controller: Seller;
   // A10: the seller gives the buyer the notice it needs to receive the goods -
   // for the F-terms a dual notice: that the goods have been delivered, or that
   // the nominated vessel/carrier failed to take them within the time agreed.
@@ -65,6 +70,7 @@ Declarations
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   scheduleRightAgreed: ScheduleRightAgreed with performer := buyer, controller := buyer;
   scheduleNotified: ScheduleNotified with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
+  invoiceProvided: InvoiceProvided with performer := seller, controller := seller;
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
@@ -86,6 +92,9 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A1: the seller provides the commercial invoice in conformity with the
+  // contract of sale (what counts as conform is the sale contract's standard).
+  oProvideInvoice: O(seller, buyer, true, Happens(invoiceProvided));
   // A8: checking, packaging and marking precede delivery.
   oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, madeAvailable)
               or ShappensBefore(packagedAndMarked, procuredSoDelivered));
@@ -153,6 +162,12 @@ Powers
   pTerminateNoCarriage: Happens(Violated(obligations.oContractCarriage)) -> P(buyer, seller, true, Terminated(self));
   // If the seller fails to clear the goods for import, the buyer may terminate.
   pTerminateNoImportClearance: Happens(Violated(obligations.oImportClearance)) -> P(buyer, seller, true, Terminated(self));
+  // B6: the buyer must accept conforming documents - so when the tendered
+  // documents are NOT in conformity with the contract, the buyer may suspend
+  // the (surviving) payment obligation until conforming documents arrive.
+  // Verified: powers may target surviving obligations (compiler + codegen).
+  pRejectDocuments: Happens(documentsProvided) ->
+              P(buyer, seller, documentsProvided.conforming == false, Suspended(obligations.oPay));
   // If the seller fails to deliver at the destination, the buyer may terminate the contract.
   pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));
   // If the buyer fails to take delivery, the seller may terminate the contract.

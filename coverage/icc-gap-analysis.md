@@ -205,10 +205,16 @@ suggested keys `b3_triggers`, `transit_clearance`, `assistance`,
   mirror of DDP (item 5), and the security thread (item 6). Tests →130. A third
   upstream codegen defect (arithmetic in consequents breaks the LegalSituation
   metadata builder) patched in the harness.
-- **Remaining (Wave 3 candidates):** dynamic B10→A2 deadline (buyer-selected
-  date feeding the delivery deadline — needs cross-event date references in
-  deadlines, unverified in the grammar); A6 document-content constraints
-  (dated-within-period, negotiable ⇒ full set, sale-in-transit polarity); B6
-  buyer acceptance/rejection power; A1 commercial invoice; FCA's two delivery
-  modes; DPU unload-then-deliver sequencing; per-article (rather than
-  consolidated) assistance obligations; DDP's B7-assistance B3 limb.
+- **Wave 3 (DONE, PR #4):** A1 commercial invoice ×11; A6 document-content
+  constraints for the B/L rules; DPU arrival-before-unloaded-delivery
+  sequencing; B6 buyer rejection power suspending the *surviving* payment
+  (which verified that powers may target surviving obligations end to end).
+  Deliberately unmodelled with the language gap recorded in
+  `symboleoac-improvements.md`: the dynamic B10→A2 deadline cascade (needs
+  conditional/default expressions), DDP's B7-assistance B3 limb (needs
+  event-relative deadlines). Tests →147, 48/48 power instances.
+- **Remaining (modelling roadmap, no language obstacle):** FCA's two delivery
+  modes as distinct events; per-article (rather than consolidated) assistance
+  obligations. **Blocked on language/tooling evolution:** see the improvement
+  catalogue + iteration plan in `symboleoac-improvements.md` (the KONTEX
+  co-evolution artifact).

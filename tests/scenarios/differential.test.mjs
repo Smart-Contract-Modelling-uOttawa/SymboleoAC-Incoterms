@@ -19,8 +19,9 @@ const INSURED = new Set(['CIF', 'CIP']);
 const src = Object.fromEntries(ALL.map((c) => [c, readFileSync(path.join(SPECS, `${c}.symboleo`), 'utf8')]));
 const has = (code, re) => re.test(src[code]);
 
-test('structural: every spec has the universal norms (deliver, take, pay)', () => {
+test('structural: every spec has the universal norms (package, deliver, take, pay)', () => {
   for (const c of ALL) {
+    assert.ok(has(c, /^\s*oPackage:/m), `${c}: missing oPackage (A8)`);
     assert.ok(has(c, /^\s*oDeliver:/m), `${c}: missing oDeliver`);
     assert.ok(has(c, /^\s*oTakeDelivery:/m), `${c}: missing oTakeDelivery`);
     assert.ok(has(c, /^\s*oPay:/m), `${c}: missing surviving oPay`);

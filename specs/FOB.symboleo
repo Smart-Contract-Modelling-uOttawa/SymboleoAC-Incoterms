@@ -16,6 +16,11 @@ Domain fobDomain
   // B3: the nominated vessel fails to arrive on time, fails to take the goods,
   // or closes for cargo earlier than notified; the buyer answers for its nominee.
   VesselFailedToLoad isAn Event with Env reason: String, performer: Buyer, controller: Buyer;
+  // A8: the seller checks (quality, weight, count), packages and marks the goods
+  // appropriately for transport, at its own cost - unless unpackaged carriage is
+  // usual for the trade or the parties agreed specific packaging requirements
+  // (the two ICC defeaters are recorded here, not modelled).
+  PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
   // Seller clears the goods for export.
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller places the goods on board the nominated vessel (risk passes).
@@ -62,6 +67,7 @@ Declarations
   billOfLading: BillOfLading with blNumber := "", owner := carrier;
   vesselNominated: VesselNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   vesselFailedToLoad: VesselFailedToLoad with performer := buyer, controller := buyer;
+  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   loadedOnBoard: LoadedOnBoard with port := portOfShipment, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
@@ -82,6 +88,9 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A8: checking, packaging and marking precede delivery.
+  oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, loadedOnBoard)
+              or ShappensBefore(packagedAndMarked, procuredSoDelivered));
   // A7: the seller clears the goods for export before they go on board.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, loadedOnBoard)
               or ShappensBefore(exportCleared, procuredSoDelivered));

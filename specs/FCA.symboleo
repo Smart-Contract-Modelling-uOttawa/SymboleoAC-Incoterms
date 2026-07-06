@@ -15,6 +15,11 @@ Domain fcaDomain
   // B3(a): the carrier nominated by the buyer fails to take the goods into
   // its charge; the buyer answers for its nominee.
   CarrierFailedToTakeCharge isAn Event with Env reason: String, performer: Buyer, controller: Buyer;
+  // A8: the seller checks (quality, weight, count), packages and marks the goods
+  // appropriately for transport, at its own cost - unless unpackaged carriage is
+  // usual for the trade or the parties agreed specific packaging requirements
+  // (the two ICC defeaters are recorded here, not modelled).
+  PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
   // Seller clears the goods for export.
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller hands the goods to the buyer's carrier at the named place (risk passes).
@@ -67,6 +72,7 @@ Declarations
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   carrierNominated: CarrierNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   carrierFailedToTakeCharge: CarrierFailedToTakeCharge with performer := buyer, controller := buyer;
+  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   handedToCarrier: HandedToCarrier with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
@@ -90,6 +96,9 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A8: checking, packaging and marking precede delivery.
+  oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, handedToCarrier)
+              or ShappensBefore(packagedAndMarked, procuredSoDelivered));
   // A7: the seller clears the goods for export before they are handed to the carrier.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, handedToCarrier)
               or ShappensBefore(exportCleared, procuredSoDelivered));

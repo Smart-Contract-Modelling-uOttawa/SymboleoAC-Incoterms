@@ -565,6 +565,13 @@ def emit_domain(c: RuleConfig) -> list[str]:
             failure_comment,
             f"  {ev} isAn Event with Env reason: String, performer: Buyer, controller: Buyer;",
         ]
+    L += [
+        "  // A8: the seller checks (quality, weight, count), packages and marks the goods",
+        "  // appropriately for transport, at its own cost - unless unpackaged carriage is",
+        "  // usual for the trade or the parties agreed specific packaging requirements",
+        "  // (the two ICC defeaters are recorded here, not modelled).",
+        "  PackagedAndMarked isAn Event with performer: Seller, controller: Seller;",
+    ]
     if p.has_export_clearance:
         L += [
             "  // Seller clears the goods for export.",
@@ -687,6 +694,7 @@ def emit_declarations(c: RuleConfig) -> list[str]:
     if p.third_party_failure:
         ev, var = p.third_party_failure
         L += [f"  {var}: {ev} with performer := buyer, controller := buyer;"]
+    L += ["  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;"]
     if p.has_export_clearance:
         L += ["  exportCleared: ExportCleared with performer := seller, controller := seller;"]
     if p.has_seller_carriage:
@@ -751,6 +759,15 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         if p.has_string_sale else f"Happens({p.delivery_var})"
     )
     L = ["Obligations"]
+    pack_before = (
+        f"ShappensBefore(packagedAndMarked, {p.delivery_var})\n"
+        f"              or ShappensBefore(packagedAndMarked, procuredSoDelivered)"
+        if p.has_string_sale else f"ShappensBefore(packagedAndMarked, {p.delivery_var})"
+    )
+    L += [
+        "  // A8: checking, packaging and marking precede delivery.",
+        f"  oPackage: O(seller, buyer, true, {pack_before});",
+    ]
     if p.has_export_clearance:
         before = (
             f"ShappensBefore(exportCleared, {p.delivery_var})\n"

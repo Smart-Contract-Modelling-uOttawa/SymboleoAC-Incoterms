@@ -7,6 +7,11 @@ Domain exwDomain
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
+  // A8: the seller checks (quality, weight, count), packages and marks the goods
+  // appropriately for transport, at its own cost - unless unpackaged carriage is
+  // usual for the trade or the parties agreed specific packaging requirements
+  // (the two ICC defeaters are recorded here, not modelled).
+  PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller makes the goods available at its premises (risk passes).
   GoodsMadeAvailable isAn Event with place: String, Env availableDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
@@ -35,6 +40,7 @@ Declarations
   seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
   buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
+  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   goodsMadeAvailable: GoodsMadeAvailable with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
   assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
@@ -48,6 +54,8 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A8: checking, packaging and marking precede delivery.
+  oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, goodsMadeAvailable));
   // A2 delivery: the seller places the goods at the buyer's disposal at its own
   // premises (the named place) before the deadline; risk passes to the buyer there.
   oDeliver: O(seller, buyer, true,

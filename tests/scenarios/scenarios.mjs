@@ -18,6 +18,8 @@ const DEST = 'DestPlace';
 const NOTICE = 10; const CARRIAGE = 10; const IMPORT = 15; const DELIV = 20; const PAY = 30;
 
 const ev = (event, attrs) => ({ event, attrs });
+// A8: checking/packaging/marking precedes delivery in every rule.
+const pack = ev('packagedAndMarked');
 
 // Shared tails of the happy trace once the goods are delivered.
 const withBoLDocs = [ev('billOfLadingIssued'), ev('documentsProvided'), ev('goodsTakenOver'), ev('paid')];
@@ -28,21 +30,21 @@ export const RULES = [
   {
     code: 'FOB', nominates: 'oNominateVessel',
     ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
-    happy: [ev('vesselNominated', { loadingPort: ORIGIN }), ev('exportCleared'),
+    happy: [ev('vesselNominated', { loadingPort: ORIGIN }), pack, ev('exportCleared'),
       ev('loadedOnBoard', { port: ORIGIN }), ...withBoLDocs],
     breach: { pre: [ev('vesselNominated', { loadingPort: ORIGIN }), ev('exportCleared')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'FAS', nominates: 'oNominateVessel',
     ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
-    happy: [ev('vesselNominated', { loadingPort: ORIGIN }), ev('exportCleared'),
+    happy: [ev('vesselNominated', { loadingPort: ORIGIN }), pack, ev('exportCleared'),
       ev('deliveredAlongside', { port: ORIGIN }), ...proofDocs],
     breach: { pre: [ev('vesselNominated', { loadingPort: ORIGIN }), ev('exportCleared')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'FCA', nominates: 'oNominateCarrier',
     ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
-    happy: [ev('carrierNominated', { namedPlace: ORIGIN }), ev('exportCleared'),
+    happy: [ev('carrierNominated', { namedPlace: ORIGIN }), pack, ev('exportCleared'),
       ev('handedToCarrier', { place: ORIGIN }), ...proofDocs],
     breach: { pre: [ev('carrierNominated', { namedPlace: ORIGIN }), ev('exportCleared')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
@@ -50,51 +52,51 @@ export const RULES = [
   {
     code: 'CFR',
     ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, CARRIAGE, DELIV, PAY],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('loadedOnBoard'), ...withBoLDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('loadedOnBoard'), ...withBoLDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'CIF',
     ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, CARRIAGE, DELIV, PAY, 'ICC(C) 110%'],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained'), ev('loadedOnBoard'), ...withBoLDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained'), ev('loadedOnBoard'), ...withBoLDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained')], violate: 'oInsure', power: 'pTerminateNoInsurance' },
   },
   {
     code: 'CPT',
     ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, CARRIAGE, DELIV, PAY],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('handedToFirstCarrier'), ...proofDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('handedToFirstCarrier'), ...proofDocs],
     breach: { pre: [ev('exportCleared')], violate: 'oContractCarriage', power: 'pTerminateNoCarriage' },
   },
   {
     code: 'CIP',
     ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, CARRIAGE, DELIV, PAY, 'ICC(A) 110%'],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained'), ev('handedToFirstCarrier'), ...proofDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained'), ev('handedToFirstCarrier'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oInsure', power: 'pTerminateNoInsurance' },
   },
   // --- D-terms: seller carriage + delivery at destination ---
   {
     code: 'DAP',
     ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, IMPORT, DELIV, PAY],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('madeAvailable'), ...proofDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('madeAvailable'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'DPU',
     ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, IMPORT, DELIV, PAY],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('unloadedAtDestination'), ...proofDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('unloadedAtDestination'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'DDP',
     ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, DELIV, PAY],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('importCleared'), ev('madeAvailable'), ...proofDocs],
+    happy: [pack, ev('exportCleared'), ev('carriageContracted'), ev('importCleared'), ev('madeAvailable'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oImportClearance', power: 'pTerminateNoImportClearance' },
   },
   // --- E-term: minimum seller obligation ---
   {
     code: 'EXW',
     ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, DELIV, PAY],
-    happy: [ev('goodsMadeAvailable'), ev('goodsTakenOver'), ev('paid')],
+    happy: [pack, ev('goodsMadeAvailable'), ev('goodsTakenOver'), ev('paid')],
     breach: { pre: [], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
 ];

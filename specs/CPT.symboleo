@@ -7,6 +7,11 @@ Domain cptDomain
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
+  // A8: the seller checks (quality, weight, count), packages and marks the goods
+  // appropriately for transport, at its own cost - unless unpackaged carriage is
+  // usual for the trade or the parties agreed specific packaging requirements
+  // (the two ICC defeaters are recorded here, not modelled).
+  PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
   // Seller clears the goods for export.
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Seller contracts carriage to the named destination (and pays the freight).
@@ -44,6 +49,7 @@ Declarations
   seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
   buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
+  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
   handedToFirstCarrier: HandedToFirstCarrier with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
@@ -62,6 +68,9 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A8: checking, packaging and marking precede delivery.
+  oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, handedToFirstCarrier)
+              or ShappensBefore(packagedAndMarked, procuredSoDelivered));
   // A7: the seller clears the goods for export before they are handed to the carrier.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, handedToFirstCarrier)
               or ShappensBefore(exportCleared, procuredSoDelivered));

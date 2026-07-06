@@ -11,6 +11,11 @@ Domain cifDomain
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
   // The bill of lading: the transport document evidencing shipment on board.
   BillOfLading isAn Asset with blNumber: String, owner: Carrier;
+  // A8: the seller checks (quality, weight, count), packages and marks the goods
+  // appropriately for transport, at its own cost - unless unpackaged carriage is
+  // usual for the trade or the parties agreed specific packaging requirements
+  // (the two ICC defeaters are recorded here, not modelled).
+  PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
   // Seller clears the goods for export.
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Seller contracts carriage to the named destination port (and pays the freight).
@@ -54,6 +59,7 @@ Declarations
   carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   billOfLading: BillOfLading with blNumber := "", owner := carrier;
+  packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPort := portOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
   insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;
@@ -74,6 +80,9 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A8: checking, packaging and marking precede delivery.
+  oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, loadedOnBoard)
+              or ShappensBefore(packagedAndMarked, procuredSoDelivered));
   // A7: the seller clears the goods for export before they go on board.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, loadedOnBoard)
               or ShappensBefore(exportCleared, procuredSoDelivered));

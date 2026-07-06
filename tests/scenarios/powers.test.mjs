@@ -34,6 +34,7 @@ function expectedPowers(code) {
   if (CARRIAGE.has(code)) p.push('pTerminateNoCarriage');
   if (INSURED.has(code)) p.push('pTerminateNoInsurance');
   if (code === 'DDP') p.push('pTerminateNoImportClearance');
+  if (code !== 'EXW') p.push('pRejectDocuments'); // B6: every rule with a document norm
   return p;
 }
 
@@ -84,6 +85,22 @@ for (const R of RULES) {
         assert.ok(!c.obligations.oDeliver.isSuspended(), `${R.code}: oDeliver still suspended`);
         for (const { event, attrs } of R.happy.slice(1)) fire(rule, c, event, attrs);
         assert.ok(c.isSuccessfulTermination(), `${R.code} contract = ${c.state}`);
+      });
+      continue;
+    }
+    if (power === 'pRejectDocuments') {
+      // Created by the documents event itself (its antecedent is the
+      // non-conformity condition); drive the happy trace through the
+      // documents tender, marked non-conforming.
+      test(`${R.code}: power coverage - pRejectDocuments created (non-conforming documents)`, () => {
+        const rule = loadRule(genDir, R.code);
+        const c = makeContract(rule, R.ctor(effNow()));
+        const idx = R.happy.findIndex((e) => e.event === 'documentsProvided');
+        assert.ok(idx > 0, `${R.code}: no documentsProvided in happy trace`);
+        for (const { event, attrs } of R.happy.slice(0, idx)) fire(rule, c, event, attrs);
+        fire(rule, c, 'documentsProvided', { conforming: false });
+        assert.ok(c.powers.pRejectDocuments != null,
+          `${R.code}: expected pRejectDocuments; have [${Object.keys(c.powers)}]`);
       });
       continue;
     }

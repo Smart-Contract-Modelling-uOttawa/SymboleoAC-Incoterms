@@ -16,6 +16,9 @@ Domain fcaDomain
   // B3(a): the carrier nominated by the buyer fails to take the goods into
   // its charge; the buyer answers for its nominee.
   CarrierFailedToTakeCharge isAn Event with Env reason: String, performer: Buyer, controller: Buyer;
+  // A1: the seller provides the commercial invoice (and any other evidence of
+  // conformity the contract of sale requires) in conformity with the contract.
+  InvoiceProvided isAn Event with performer: Seller, controller: Seller;
   // A8: the seller checks (quality, weight, count), packages and marks the goods
   // appropriately for transport, at its own cost - unless unpackaged carriage is
   // usual for the trade or the parties agreed specific packaging requirements
@@ -36,7 +39,9 @@ Domain fcaDomain
   // so delivered (string sales, common in commodity chains).
   ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller hands the buyer the usual proof of delivery to the carrier.
-  DocumentsProvided isAn Event with performer: Seller, controller: Seller;
+  // The Env conforming flag records whether the tendered documents are in
+  // conformity with the contract (B6: the buyer must accept them iff they are).
+  DocumentsProvided isAn Event with Env conforming: Boolean, performer: Seller, controller: Seller;
   // FCA A6/B6 optional mechanism (new in Incoterms 2020): if the parties have
   // agreed (recorded by OnBoardBLAgreed), the buyer must instruct its carrier -
   // at the buyer's cost and risk - to issue the seller a bill of lading with an
@@ -84,6 +89,7 @@ Declarations
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   carrierNominated: CarrierNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   carrierFailedToTakeCharge: CarrierFailedToTakeCharge with performer := buyer, controller := buyer;
+  invoiceProvided: InvoiceProvided with performer := seller, controller := seller;
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
@@ -111,6 +117,9 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A1: the seller provides the commercial invoice in conformity with the
+  // contract of sale (what counts as conform is the sale contract's standard).
+  oProvideInvoice: O(seller, buyer, true, Happens(invoiceProvided));
   // A8: checking, packaging and marking precede delivery.
   oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, handedToCarrier)
               or ShappensBefore(packagedAndMarked, procuredSoDelivered));
@@ -191,6 +200,12 @@ Powers
   // A late nomination during the suspension resumes the delivery obligation.
   pResumeDelivery: HappensWithin(carrierNominated, Suspension(obligations.oDeliver)) ->
               P(buyer, seller, true, Resumed(obligations.oDeliver));
+  // B6: the buyer must accept conforming documents - so when the tendered
+  // documents are NOT in conformity with the contract, the buyer may suspend
+  // the (surviving) payment obligation until conforming documents arrive.
+  // Verified: powers may target surviving obligations (compiler + codegen).
+  pRejectDocuments: Happens(documentsProvided) ->
+              P(buyer, seller, documentsProvided.conforming == false, Suspended(obligations.oPay));
   // If the seller fails to deliver to the carrier, the buyer may terminate the contract.
   pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));
   // If the buyer fails to take delivery, the seller may terminate the contract.

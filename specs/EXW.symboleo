@@ -12,6 +12,9 @@ Domain exwDomain
   // the buyer must then give sufficient notice in time.
   ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;
   ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  // A1: the seller provides the commercial invoice (and any other evidence of
+  // conformity the contract of sale requires) in conformity with the contract.
+  InvoiceProvided isAn Event with performer: Seller, controller: Seller;
   // A8: the seller checks (quality, weight, count), packages and marks the goods
   // appropriately for transport, at its own cost - unless unpackaged carriage is
   // usual for the trade or the parties agreed specific packaging requirements
@@ -55,6 +58,7 @@ Declarations
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   scheduleRightAgreed: ScheduleRightAgreed with performer := buyer, controller := buyer;
   scheduleNotified: ScheduleNotified with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
+  invoiceProvided: InvoiceProvided with performer := seller, controller := seller;
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   clearedByBuyer: ClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
   goodsMadeAvailable: GoodsMadeAvailable with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
@@ -71,6 +75,9 @@ Preconditions
   goods.quantity > 0;
 
 Obligations
+  // A1: the seller provides the commercial invoice in conformity with the
+  // contract of sale (what counts as conform is the sale contract's standard).
+  oProvideInvoice: O(seller, buyer, true, Happens(invoiceProvided));
   // A8: checking, packaging and marking precede delivery.
   oPackage: O(seller, buyer, true, ShappensBefore(packagedAndMarked, goodsMadeAvailable));
   // A2 delivery: the seller places the goods at the buyer's disposal at its own

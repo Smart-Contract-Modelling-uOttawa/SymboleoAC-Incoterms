@@ -26,6 +26,16 @@ Domain cfrDomain
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
+  // buyer's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToBuyerRequested isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToBuyerProvided isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToBuyerReimbursed isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, buyer -> seller (ICC pattern: 'at the
+  // seller's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToSellerRequested isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToSellerProvided isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToSellerReimbursed isAn Event with Env amount: Number, performer: Seller, controller: Seller;
   // Buyer pays the price.
   Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
 endDomain
@@ -49,6 +59,12 @@ Declarations
   billOfLadingIssued: BillOfLadingIssued with performer := carrier, controller := carrier;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
+  assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
+  assistanceToBuyerReimbursed: AssistanceToBuyerReimbursed with performer := buyer, controller := buyer;
+  assistanceToSellerRequested: AssistanceToSellerRequested with performer := seller, controller := seller;
+  assistanceToSellerProvided: AssistanceToSellerProvided with performer := buyer, controller := buyer;
+  assistanceToSellerReimbursed: AssistanceToSellerReimbursed with performer := seller, controller := seller;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
 
 Preconditions
@@ -75,6 +91,21 @@ Obligations
               Happens(billOfLadingIssued) and Happens(documentsProvided));
   // B2: the buyer takes delivery of the goods once they are on board.
   oTakeDelivery: (Happens(loadedOnBoard) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  // At the buyer's request, risk and cost, the seller provides assistance with:
+  //   - A5: insurance information
+  //   - A7(b): transit/import clearance documents and information
+  oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
+              Happens(assistanceToBuyerProvided));
+  // B9: the buyer reimburses all costs of assistance it requested.
+  oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,
+              Happens(assistanceToBuyerReimbursed));
+  // At the seller's request, risk and cost, the buyer provides assistance with:
+  //   - B7(a): export clearance documents and information
+  oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
+              Happens(assistanceToSellerProvided));
+  // A9: the seller reimburses all costs of assistance it requested.
+  oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,
+              Happens(assistanceToSellerReimbursed));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered on board and evidenced

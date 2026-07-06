@@ -23,6 +23,16 @@ Domain fcaDomain
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
+  // buyer's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToBuyerRequested isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToBuyerProvided isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToBuyerReimbursed isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, buyer -> seller (ICC pattern: 'at the
+  // seller's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToSellerRequested isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToSellerProvided isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToSellerReimbursed isAn Event with Env amount: Number, performer: Seller, controller: Seller;
   // The goods are clearly identified (appropriated) as the contract goods -
   // the ICC proviso guarding every premature risk/cost transfer (B3/B9).
   GoodsIdentified isAn Event with performer: Seller, controller: Seller;
@@ -49,6 +59,12 @@ Declarations
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
+  assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
+  assistanceToBuyerReimbursed: AssistanceToBuyerReimbursed with performer := buyer, controller := buyer;
+  assistanceToSellerRequested: AssistanceToSellerRequested with performer := seller, controller := seller;
+  assistanceToSellerProvided: AssistanceToSellerProvided with performer := buyer, controller := buyer;
+  assistanceToSellerReimbursed: AssistanceToSellerReimbursed with performer := seller, controller := seller;
   goodsIdentified: GoodsIdentified with performer := seller, controller := seller;
   additionalCostsPaid: AdditionalCostsPaid with performer := buyer, controller := buyer;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
@@ -75,6 +91,23 @@ Obligations
   oNominateCarrier: O(buyer, seller, true, WhappensBefore(carrierNominated, carrierNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are with the carrier.
   oTakeDelivery: (Happens(handedToCarrier) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  // At the buyer's request, risk and cost, the seller provides assistance with:
+  //   - A4: transport information incl. security requirements
+  //   - A5: insurance information
+  //   - A6: obtaining a transport document, where the proof of delivery is not one
+  //   - A7(b): transit/import clearance documents and information
+  oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
+              Happens(assistanceToBuyerProvided));
+  // B9: the buyer reimburses all costs of assistance it requested.
+  oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,
+              Happens(assistanceToBuyerReimbursed));
+  // At the seller's request, risk and cost, the buyer provides assistance with:
+  //   - B7(a): export clearance documents and information
+  oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
+              Happens(assistanceToSellerProvided));
+  // A9: the seller reimburses all costs of assistance it requested.
+  oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,
+              Happens(assistanceToSellerReimbursed));
   // B3/B9(d): if the buyer fails to nominate the carrier in time or its nominee fails to take the goods,
   // the buyer bears the resulting additional costs - the rules' premature
   // risk/cost transfer, guarded by the ICC proviso that the goods have been

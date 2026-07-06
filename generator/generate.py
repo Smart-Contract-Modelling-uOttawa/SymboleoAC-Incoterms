@@ -131,6 +131,9 @@ class Profile:
     # B3/B9(d) premature risk/cost transfer limbs modelled for this rule
     # (from incoterms.data.yaml b3_triggers; see the key's comment there).
     b3_triggers: list[str] = field(default_factory=list)
+    # ICC request-triggered assistance topics per direction (yaml `assistance`).
+    assist_to_buyer: list[str] = field(default_factory=list)
+    assist_to_seller: list[str] = field(default_factory=list)
     insurance_cover_phrase: str = ""   # e.g. "ICC (C)" / "ICC (A)" (CIF/CIP)
     # Mode vocabulary (spread from _sea_vocab / _any_vocab).
     transport_noun: str = ""
@@ -200,6 +203,7 @@ class RuleConfig:
     cost: list[str]
     insurance_cover: str | None = None
     b3_triggers: list[str] = field(default_factory=list)
+    assistance: dict = field(default_factory=dict)
     profile: Profile = field(init=False)
 
     @property
@@ -222,6 +226,7 @@ def load_rules() -> dict[str, RuleConfig]:
             cost=list(row["cost"]),
             insurance_cover=row.get("insurance_cover"),
             b3_triggers=list(row.get("b3_triggers") or []),
+            assistance=dict(row.get("assistance") or {}),
         )
     return rules
 
@@ -497,6 +502,8 @@ def profile_for(c: RuleConfig) -> Profile:
     dpp = _delivery_place_param(spec["term_type"], vocab)
     return Profile(contract_params_tail=tail, insurance_cover=cover,
                    delivery_place_param=dpp, b3_triggers=list(c.b3_triggers),
+                   assist_to_buyer=list(c.assistance.get("to_buyer") or []),
+                   assist_to_seller=list(c.assistance.get("to_seller") or []),
                    **spec, **vocab)
 
 
@@ -598,6 +605,22 @@ def emit_domain(c: RuleConfig) -> list[str]:
         "  // Buyer takes delivery of the goods.",
         "  GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;",
     ]
+    if p.assist_to_buyer:
+        L += [
+            "  // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the",
+            "  // buyer's request, risk and cost'; per-article topics at the obligation).",
+            "  AssistanceToBuyerRequested isAn Event with Env topic: String, performer: Buyer, controller: Buyer;",
+            "  AssistanceToBuyerProvided isAn Event with Env topic: String, performer: Seller, controller: Seller;",
+            "  AssistanceToBuyerReimbursed isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;",
+        ]
+    if p.assist_to_seller:
+        L += [
+            "  // Request-triggered assistance channel, buyer -> seller (ICC pattern: 'at the",
+            "  // seller's request, risk and cost'; per-article topics at the obligation).",
+            "  AssistanceToSellerRequested isAn Event with Env topic: String, performer: Seller, controller: Seller;",
+            "  AssistanceToSellerProvided isAn Event with Env topic: String, performer: Buyer, controller: Buyer;",
+            "  AssistanceToSellerReimbursed isAn Event with Env amount: Number, performer: Seller, controller: Seller;",
+        ]
     if p.has_failure_costs:
         L += [
             "  // The goods are clearly identified (appropriated) as the contract goods -",
@@ -662,6 +685,18 @@ def emit_declarations(c: RuleConfig) -> list[str]:
     if p.has_documents:
         L += ["  documentsProvided: DocumentsProvided with performer := seller, controller := seller;"]
     L += ["  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;"]
+    if p.assist_to_buyer:
+        L += [
+            "  assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;",
+            "  assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;",
+            "  assistanceToBuyerReimbursed: AssistanceToBuyerReimbursed with performer := buyer, controller := buyer;",
+        ]
+    if p.assist_to_seller:
+        L += [
+            "  assistanceToSellerRequested: AssistanceToSellerRequested with performer := seller, controller := seller;",
+            "  assistanceToSellerProvided: AssistanceToSellerProvided with performer := buyer, controller := buyer;",
+            "  assistanceToSellerReimbursed: AssistanceToSellerReimbursed with performer := seller, controller := seller;",
+        ]
     if p.has_failure_costs:
         L += [
             "  goodsIdentified: GoodsIdentified with performer := seller, controller := seller;",
@@ -781,6 +816,26 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         f"  // B2: the buyer takes delivery of the goods once they are {p.take_phrase}.",
         f"  oTakeDelivery: {delivered} -> O(buyer, seller, true, Happens(goodsTakenOver));",
     ]
+    if p.assist_to_buyer:
+        L += ["  // At the buyer's request, risk and cost, the seller provides assistance with:"]
+        L += [f"  //   - {t}" for t in p.assist_to_buyer]
+        L += [
+            "  oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,",
+            "              Happens(assistanceToBuyerProvided));",
+            "  // B9: the buyer reimburses all costs of assistance it requested.",
+            "  oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,",
+            "              Happens(assistanceToBuyerReimbursed));",
+        ]
+    if p.assist_to_seller:
+        L += ["  // At the seller's request, risk and cost, the buyer provides assistance with:"]
+        L += [f"  //   - {t}" for t in p.assist_to_seller]
+        L += [
+            "  oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,",
+            "              Happens(assistanceToSellerProvided));",
+            "  // A9: the seller reimburses all costs of assistance it requested.",
+            "  oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,",
+            "              Happens(assistanceToSellerReimbursed));",
+        ]
     if p.has_failure_costs:
         parts, why = [], []
         for t in p.b3_triggers:

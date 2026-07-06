@@ -45,6 +45,13 @@ cost_stages:
 # The B10-notice-only limbs of EXW/CPT/CIP/CFR/CIF and DDP's B7-assistance limb
 # are NOT yet modelled (no notice obligation exists for those rules); see
 # coverage/coverage-matrix.md.
+#
+# assistance - the ICC request-triggered assistance pattern ("at the
+# requester's request, risk and cost", recurring in A4/A5/A6/A7(b), B5 and
+# B7(a) and reimbursed via A9/B9). Modelled as one assistance channel per
+# direction (request -> assist obligation -> reimbursement obligation); the
+# per-article topics below are carried into the generated spec as comments,
+# so the coverage matrix can trace each article to the channel.
 rules:
   EXW:
     name: Ex Works
@@ -55,6 +62,12 @@ rules:
     import_clearance: buyer
     cost: [B,B,B,B,B,B,B,B,B,B,B,B,B]
     b3_triggers: [take_delivery_violated]
+    assistance:
+      to_buyer:
+        - "A4: transport information incl. security requirements"
+        - "A5: insurance information"
+        - "A7: export/transit/import clearance documents and information (EXW: all clearance is the buyer's)"
+      to_seller: []
   FCA:
     name: Free Carrier
     family: any_mode
@@ -64,6 +77,14 @@ rules:
     import_clearance: buyer
     cost: [S,S,"S/B",B,B,B,B,B,B,B,B,B,B]
     b3_triggers: [nomination_violated, carrier_failed]
+    assistance:
+      to_buyer:
+        - "A4: transport information incl. security requirements"
+        - "A5: insurance information"
+        - "A6: obtaining a transport document, where the proof of delivery is not one"
+        - "A7(b): transit/import clearance documents and information"
+      to_seller:
+        - "B7(a): export clearance documents and information"
   CPT:
     name: Carriage Paid To
     family: any_mode
@@ -73,6 +94,12 @@ rules:
     import_clearance: buyer
     cost: [S,S,S,S,S,S,B,"S/B","S/B",B,B,B,B]
     b3_triggers: []          # B10-notice limb only; notice obligation not yet modelled
+    assistance:
+      to_buyer:
+        - "A5: insurance information"
+        - "A7(b): transit/import clearance documents and information"
+      to_seller:
+        - "B7(a): export clearance documents and information"
   CIP:
     name: Carriage and Insurance Paid To
     family: any_mode
@@ -83,6 +110,13 @@ rules:
     import_clearance: buyer
     cost: [S,S,S,S,S,S,S,"S/B","S/B",B,B,B,B]
     b3_triggers: []          # B10-notice limb only; notice obligation not yet modelled
+    assistance:
+      to_buyer:
+        - "A5: information for additional cover (War/Strikes) requested by the buyer"
+        - "A7(b): transit/import clearance documents and information"
+      to_seller:
+        - "B7(a): export clearance documents and information"
+        - "B5: information for additional cover (War/Strikes) the buyer requested"
   DAP:
     name: Delivered At Place
     family: any_mode
@@ -92,6 +126,12 @@ rules:
     import_clearance: buyer
     cost: [S,S,S,S,S,S,S,S,S,S,B,B,B]
     b3_triggers: [import_clearance_violated]
+    assistance:
+      to_buyer:
+        - "A7(b): import clearance documents and information"
+      to_seller:
+        - "B7(a): export/transit clearance documents and information"
+        - "B5: information the seller needs for obtaining insurance"
   DPU:
     name: Delivered At Place Unloaded
     family: any_mode
@@ -101,6 +141,12 @@ rules:
     import_clearance: buyer
     cost: [S,S,S,S,S,S,S,S,S,S,B,B,S]
     b3_triggers: [import_clearance_violated]
+    assistance:
+      to_buyer:
+        - "A7(b): import clearance documents and information"
+      to_seller:
+        - "B7(a): export/transit clearance documents and information"
+        - "B5: information the seller needs for obtaining insurance"
   DDP:
     name: Delivered Duty Paid
     family: any_mode
@@ -110,6 +156,11 @@ rules:
     import_clearance: seller
     cost: [S,S,S,S,S,S,S,S,S,S,S,S,B]
     b3_triggers: []          # B7-assistance limb; assistance has no deadline to violate
+    assistance:
+      to_buyer: []
+      to_seller:
+        - "B7: clearance documents and information for the seller's export/transit/import formalities"
+        - "B5: information the seller needs for obtaining insurance"
   FAS:
     name: Free Alongside Ship
     family: sea
@@ -119,6 +170,14 @@ rules:
     import_clearance: buyer
     cost: [S,S,S,S,B,B,B,B,B,B,B,B,B]
     b3_triggers: [nomination_violated, vessel_failed]
+    assistance:
+      to_buyer:
+        - "A4: transport information incl. security requirements"
+        - "A5: insurance information"
+        - "A6: obtaining a transport document, where the proof of delivery is not one"
+        - "A7(b): transit/import clearance documents and information"
+      to_seller:
+        - "B7(a): export clearance documents and information"
   FOB:
     name: Free on Board
     family: sea
@@ -128,6 +187,14 @@ rules:
     import_clearance: buyer
     cost: [S,S,S,S,S,B,B,B,B,B,B,B,B]
     b3_triggers: [nomination_violated, vessel_failed]
+    assistance:
+      to_buyer:
+        - "A4: transport information incl. security requirements"
+        - "A5: insurance information"
+        - "A6: obtaining a transport document, where the proof of delivery is not one"
+        - "A7(b): transit/import clearance documents and information"
+      to_seller:
+        - "B7(a): export clearance documents and information"
   CFR:
     name: Cost and Freight
     family: sea
@@ -137,6 +204,12 @@ rules:
     import_clearance: buyer
     cost: [S,S,S,S,S,S,B,B,B,B,B,B,B]
     b3_triggers: []          # B10-notice limb only; notice obligation not yet modelled
+    assistance:
+      to_buyer:
+        - "A5: insurance information"
+        - "A7(b): transit/import clearance documents and information"
+      to_seller:
+        - "B7(a): export clearance documents and information"
   CIF:
     name: Cost, Insurance and Freight
     family: sea
@@ -147,3 +220,10 @@ rules:
     import_clearance: buyer
     cost: [S,S,S,S,S,S,S,B,B,B,B,B,B]
     b3_triggers: []          # B10-notice limb only; notice obligation not yet modelled
+    assistance:
+      to_buyer:
+        - "A5: information for additional cover (War/Strikes) requested by the buyer"
+        - "A7(b): transit/import clearance documents and information"
+      to_seller:
+        - "B7(a): export clearance documents and information"
+        - "B5: information for additional cover (War/Strikes) the buyer requested"

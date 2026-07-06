@@ -22,6 +22,11 @@ Domain ddpDomain
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, buyer -> seller (ICC pattern: 'at the
+  // seller's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToSellerRequested isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToSellerProvided isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToSellerReimbursed isAn Event with Env amount: Number, performer: Seller, controller: Seller;
   // Buyer pays the price.
   Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
 endDomain
@@ -43,6 +48,9 @@ Declarations
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  assistanceToSellerRequested: AssistanceToSellerRequested with performer := seller, controller := seller;
+  assistanceToSellerProvided: AssistanceToSellerProvided with performer := buyer, controller := buyer;
+  assistanceToSellerReimbursed: AssistanceToSellerReimbursed with performer := seller, controller := seller;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
 
 Preconditions
@@ -72,6 +80,14 @@ Obligations
               Happens(documentsProvided));
   // B2: the buyer takes delivery of the goods once they are at the destination.
   oTakeDelivery: (Happens(madeAvailable) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  // At the seller's request, risk and cost, the buyer provides assistance with:
+  //   - B7: clearance documents and information for the seller's export/transit/import formalities
+  //   - B5: information the seller needs for obtaining insurance
+  oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
+              Happens(assistanceToSellerProvided));
+  // A9: the seller reimburses all costs of assistance it requested.
+  oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,
+              Happens(assistanceToSellerReimbursed));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered at the destination and evidenced

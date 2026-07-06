@@ -15,7 +15,7 @@ Domain cifDomain
   // determine the time and/or point of delivery (recorded by ScheduleRightAgreed);
   // the buyer must then give sufficient notice in time.
   ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;
-  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
   // A8: the seller checks (quality, weight, count), packages and marks the goods
   // appropriately for transport, at its own cost - unless unpackaged carriage is
   // usual for the trade or the parties agreed specific packaging requirements
@@ -25,6 +25,13 @@ Domain cifDomain
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Seller contracts carriage to the named destination port (and pays the freight).
   CarriageContracted isAn Event with destinationPort: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities - licences, security clearance, pre-shipment
+  // inspection, duties - in time for delivery/receipt.
+  ImportClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;
+  // A4 (2020): the seller complies with transport-related security requirements
+  // for the transport to the destination.
+  SecurityComplied isAn Event with performer: Seller, controller: Seller;
   // A5: seller takes out cargo insurance for the buyer's benefit. The named
   // clause set (ICC (A)/(C)) stays data (coverLevel); the minimum insured
   // amount (110% of the price) and the contract currency are checked in oInsure.
@@ -76,7 +83,7 @@ endDomain
 Contract CIF (
   sellerP: Seller, buyerP: Buyer, carrierP: Carrier,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  portOfShipment: String, portOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, deliveryDays: Number, paymentDays: Number, insuranceCover: String
+  portOfShipment: String, portOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, insuranceCover: String
 )
 
 Declarations
@@ -90,6 +97,8 @@ Declarations
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPort := portOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
+  importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
+  securityComplied: SecurityComplied with performer := seller, controller := seller;
   insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;
   insuranceDocProvided: InsuranceDocProvided with performer := seller, controller := seller;
   additionalCoverRequested: AdditionalCoverRequested with performer := buyer, controller := buyer;
@@ -122,6 +131,10 @@ Obligations
   // A7: the seller clears the goods for export before they go on board.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, loadedOnBoard)
               or ShappensBefore(exportCleared, procuredSoDelivered));
+  // A4 (2020): the seller complies with transport-security requirements for
+  // the transport to the destination (beyond the origin delivery event, so
+  // not bounded by it).
+  oSecurityCompliance: O(seller, buyer, true, Happens(securityComplied));
   // A4: the seller contracts carriage to the named destination port, at its own cost, in time.
   oContractCarriage: O(seller, buyer, true,
               WhappensBefore(carriageContracted, carriageContracted.dueDate)
@@ -165,6 +178,9 @@ Obligations
   // time; its failure is a B3/B9(d) premature-transfer trigger.
   oNotifySchedule: Happens(scheduleRightAgreed) -> O(buyer, seller, true,
               WhappensBefore(scheduleNotified, scheduleNotified.dueDate));
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities in time.
+  oImportClearanceBuyer: O(buyer, seller, true, WhappensBefore(importClearedByBuyer, importClearedByBuyer.dueDate));
   // B2: the buyer takes delivery of the goods once they are on board.
   oTakeDelivery: (Happens(loadedOnBoard) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
   // At the buyer's request, risk and cost, the seller provides assistance with:

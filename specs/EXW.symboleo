@@ -11,12 +11,16 @@ Domain exwDomain
   // determine the time and/or point of delivery (recorded by ScheduleRightAgreed);
   // the buyer must then give sufficient notice in time.
   ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;
-  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
   // A8: the seller checks (quality, weight, count), packages and marks the goods
   // appropriately for transport, at its own cost - unless unpackaged carriage is
   // usual for the trade or the parties agreed specific packaging requirements
   // (the two ICC defeaters are recorded here, not modelled).
   PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
+  // B7 EXW ('where applicable'): the buyer carries out and pays for ALL
+  // clearance formalities - export, transit AND import (the seller only
+  // assists on request; see the assistance channel).
+  ClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;
   // Delivery: seller makes the goods available at its premises (risk passes).
   GoodsMadeAvailable isAn Event with place: String, Env availableDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // A10: the seller gives the buyer the notice it needs to receive the goods -
@@ -42,7 +46,7 @@ endDomain
 Contract EXW (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDelivery: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number
+  placeOfDelivery: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
 )
 
 Declarations
@@ -52,6 +56,7 @@ Declarations
   scheduleRightAgreed: ScheduleRightAgreed with performer := buyer, controller := buyer;
   scheduleNotified: ScheduleNotified with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
+  clearedByBuyer: ClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
   goodsMadeAvailable: GoodsMadeAvailable with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   deliveryNoticeGiven: DeliveryNoticeGiven with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
@@ -82,6 +87,9 @@ Obligations
   // time; its failure is a B3/B9(d) premature-transfer trigger.
   oNotifySchedule: Happens(scheduleRightAgreed) -> O(buyer, seller, true,
               WhappensBefore(scheduleNotified, scheduleNotified.dueDate));
+  // B7 EXW ('where applicable'): the buyer carries out and pays for all
+  // export, transit and import clearance formalities.
+  oClearanceBuyer: O(buyer, seller, true, WhappensBefore(clearedByBuyer, clearedByBuyer.dueDate));
   // B2: the buyer takes delivery of the goods once they are at the seller's premises.
   oTakeDelivery: Happens(goodsMadeAvailable) -> O(buyer, seller, true, Happens(goodsTakenOver));
   // At the buyer's request, risk and cost, the seller provides assistance with:

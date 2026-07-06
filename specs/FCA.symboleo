@@ -10,8 +10,9 @@ Domain fcaDomain
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
-  // Buyer nominates the carrier and gives notice (name, place, deadline).
-  CarrierNominated isAn Event with Env carrierName: String, Env namedPlace: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  // Buyer nominates the carrier and gives notice (name, place,
+  // transport-security requirements, deadline) - the typed B10 content.
+  CarrierNominated isAn Event with Env carrierName: String, Env namedPlace: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
   // B3(a): the carrier nominated by the buyer fails to take the goods into
   // its charge; the buyer answers for its nominee.
   CarrierFailedToTakeCharge isAn Event with Env reason: String, performer: Buyer, controller: Buyer;
@@ -22,6 +23,13 @@ Domain fcaDomain
   PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
   // Seller clears the goods for export.
   ExportCleared isAn Event with performer: Seller, controller: Seller;
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities - licences, security clearance, pre-shipment
+  // inspection, duties - in time for delivery/receipt.
+  ImportClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;
+  // A4 (2020): the seller complies with transport-related security requirements
+  // up to delivery.
+  SecurityComplied isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller hands the goods to the buyer's carrier at the named place (risk passes).
   HandedToCarrier isAn Event with place: String, Env handoverDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // A2 alternative performance: the seller may instead procure goods already
@@ -66,7 +74,7 @@ endDomain
 Contract FCA (
   sellerP: Seller, buyerP: Buyer, carrierP: Carrier,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDelivery: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number
+  placeOfDelivery: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
 )
 
 Declarations
@@ -78,6 +86,8 @@ Declarations
   carrierFailedToTakeCharge: CarrierFailedToTakeCharge with performer := buyer, controller := buyer;
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
+  importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
+  securityComplied: SecurityComplied with performer := seller, controller := seller;
   handedToCarrier: HandedToCarrier with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
@@ -107,6 +117,9 @@ Obligations
   // A7: the seller clears the goods for export before they are handed to the carrier.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, handedToCarrier)
               or ShappensBefore(exportCleared, procuredSoDelivered));
+  // A4 (2020): the seller complies with transport-security requirements up to delivery.
+  oSecurityCompliance: O(seller, buyer, true, ShappensBefore(securityComplied, handedToCarrier)
+              or ShappensBefore(securityComplied, procuredSoDelivered));
   // A2 delivery: once the buyer has nominated the carrier, the seller must place
   // the goods to the carrier, at the named place, before the deadline
   // - or procure goods already so delivered (string sales).
@@ -133,6 +146,9 @@ Obligations
               Happens(onBoardBLForwarded));
   // B4/B10: the buyer nominates the carrier and gives sufficient notice in time.
   oNominateCarrier: O(buyer, seller, true, WhappensBefore(carrierNominated, carrierNominated.dueDate));
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities in time.
+  oImportClearanceBuyer: O(buyer, seller, true, WhappensBefore(importClearedByBuyer, importClearedByBuyer.dueDate));
   // B2: the buyer takes delivery of the goods once they are with the carrier.
   oTakeDelivery: (Happens(handedToCarrier) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
   // At the buyer's request, risk and cost, the seller provides assistance with:

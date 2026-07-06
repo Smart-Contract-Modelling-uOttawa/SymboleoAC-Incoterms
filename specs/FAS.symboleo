@@ -7,8 +7,9 @@ Domain fasDomain
   Currency isAn Enumeration(CAD, USD, EUR);
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
-  // Buyer nominates the vessel and gives notice (name, loading point, deadline).
-  VesselNominated isAn Event with Env vesselName: String, Env loadingPort: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  // Buyer nominates the vessel and gives notice (name, loading point,
+  // transport-security requirements, deadline) - the typed B10 content.
+  VesselNominated isAn Event with Env vesselName: String, Env loadingPort: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
   // B3: the nominated vessel fails to arrive on time, fails to take the goods,
   // or closes for cargo earlier than notified; the buyer answers for its nominee.
   VesselFailedToLoad isAn Event with Env reason: String, performer: Buyer, controller: Buyer;
@@ -19,6 +20,13 @@ Domain fasDomain
   PackagedAndMarked isAn Event with performer: Seller, controller: Seller;
   // Seller clears the goods for export.
   ExportCleared isAn Event with performer: Seller, controller: Seller;
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities - licences, security clearance, pre-shipment
+  // inspection, duties - in time for delivery/receipt.
+  ImportClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;
+  // A4 (2020): the seller complies with transport-related security requirements
+  // up to delivery.
+  SecurityComplied isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller places the goods alongside the nominated vessel (risk passes).
   DeliveredAlongside isAn Event with port: String, Env alongsideDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // A2 alternative performance: the seller may instead procure goods already
@@ -54,7 +62,7 @@ endDomain
 Contract FAS (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  portOfShipment: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number
+  portOfShipment: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
 )
 
 Declarations
@@ -65,6 +73,8 @@ Declarations
   vesselFailedToLoad: VesselFailedToLoad with performer := buyer, controller := buyer;
   packagedAndMarked: PackagedAndMarked with performer := seller, controller := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
+  importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
+  securityComplied: SecurityComplied with performer := seller, controller := seller;
   deliveredAlongside: DeliveredAlongside with port := portOfShipment, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
@@ -90,6 +100,9 @@ Obligations
   // A7: the seller clears the goods for export before they are placed alongside.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, deliveredAlongside)
               or ShappensBefore(exportCleared, procuredSoDelivered));
+  // A4 (2020): the seller complies with transport-security requirements up to delivery.
+  oSecurityCompliance: O(seller, buyer, true, ShappensBefore(securityComplied, deliveredAlongside)
+              or ShappensBefore(securityComplied, procuredSoDelivered));
   // A2 delivery: once the buyer has nominated the vessel, the seller must place
   // the goods alongside it, at the named loading point, before the deadline
   // - or procure goods already so delivered (string sales).
@@ -107,6 +120,9 @@ Obligations
               Happens(deliveryNoticeGiven));
   // B4/B10: the buyer nominates the vessel and gives sufficient notice in time.
   oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities in time.
+  oImportClearanceBuyer: O(buyer, seller, true, WhappensBefore(importClearedByBuyer, importClearedByBuyer.dueDate));
   // B2: the buyer takes delivery of the goods once they are alongside.
   oTakeDelivery: (Happens(deliveredAlongside) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
   // At the buyer's request, risk and cost, the seller provides assistance with:

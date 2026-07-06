@@ -11,7 +11,7 @@ Domain dapDomain
   // determine the time and/or point of delivery (recorded by ScheduleRightAgreed);
   // the buyer must then give sufficient notice in time.
   ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;
-  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;
   // A8: the seller checks (quality, weight, count), packages and marks the goods
   // appropriately for transport, at its own cost - unless unpackaged carriage is
   // usual for the trade or the parties agreed specific packaging requirements
@@ -21,9 +21,13 @@ Domain dapDomain
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Seller contracts carriage to the named destination (and pays the freight).
   CarriageContracted isAn Event with destinationPlace: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
-  // B7: the buyer carries out and pays for import (and transit) clearance
-  // formalities - licences, security clearance, duties - in time for delivery.
+  // B7 ('where applicable'): the buyer carries out and pays for transit and
+  // import clearance formalities - licences, security clearance, pre-shipment
+  // inspection, duties - in time for delivery/receipt.
   ImportClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;
+  // A4 (2020): the seller complies with transport-related security requirements
+  // for the transport to the destination.
+  SecurityComplied isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller makes the goods available at the destination, ready for unloading (risk passes).
   MadeAvailableAtDestination isAn Event with place: String, Env arrivalDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // A2 alternative performance: the seller may instead procure goods already
@@ -72,6 +76,7 @@ Declarations
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
   importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
+  securityComplied: SecurityComplied with performer := seller, controller := seller;
   madeAvailable: MadeAvailableAtDestination with place := placeOfDestination, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
@@ -97,6 +102,10 @@ Obligations
   // A7: the seller clears the goods for export before they are dispatched.
   oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, madeAvailable)
               or ShappensBefore(exportCleared, procuredSoDelivered));
+  // A4 (2020): the seller complies with transport-security requirements for
+  // the transport to the destination (beyond the origin delivery event, so
+  // not bounded by it).
+  oSecurityCompliance: O(seller, buyer, true, Happens(securityComplied));
   // A4: the seller contracts carriage to the named destination, at its own cost, in time.
   oContractCarriage: O(seller, buyer, true,
               WhappensBefore(carriageContracted, carriageContracted.dueDate)

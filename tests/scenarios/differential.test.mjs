@@ -111,10 +111,24 @@ test('differential: A10 notice in every rule; conditional B10 schedule notice if
   }
 });
 
-test('differential: buyer-side import clearance iff DAP/DPU (B3(a) trigger)', () => {
+test('differential: buyer-side clearance follows the ICC allocation', () => {
   for (const c of ALL) {
-    assert.equal(has(c, /^\s*oImportClearanceBuyer:/m), c === 'DAP' || c === 'DPU',
+    // Every rule whose import clearance the ICC table assigns to the buyer
+    // (all but DDP and EXW) has the first-class buyer obligation; EXW's buyer
+    // instead clears everything (export/transit/import).
+    assert.equal(has(c, /^\s*oImportClearanceBuyer:/m), c !== 'DDP' && c !== 'EXW',
       `${c}: oImportClearanceBuyer presence`);
+    assert.equal(has(c, /^\s*oClearanceBuyer:/m), c === 'EXW', `${c}: oClearanceBuyer presence`);
+  }
+});
+
+test('differential: A4 security compliance in every rule except EXW', () => {
+  for (const c of ALL) {
+    assert.equal(has(c, /^\s*oSecurityCompliance:/m), c !== 'EXW', `${c}: oSecurityCompliance presence`);
+    // B10 notified content includes transport-security requirements.
+    if (c !== 'EXW') {
+      assert.ok(has(c, /Env securityRequirements: String/), `${c}: securityRequirements notice content`);
+    }
   }
 });
 

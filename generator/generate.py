@@ -138,6 +138,11 @@ class Profile:
     # ICC request-triggered assistance topics per direction (yaml `assistance`).
     assist_to_buyer: list[str] = field(default_factory=list)
     assist_to_seller: list[str] = field(default_factory=list)
+    # B7 buyer-side clearance (Wave 2d): every rule whose import clearance the
+    # ICC table assigns to the buyer gets a first-class buyer obligation
+    # (transit + import); EXW's buyer additionally clears export (see
+    # has_buyer_full_clearance).
+    buyer_import_clearance: bool = False
     insurance_cover_phrase: str = ""   # e.g. "ICC (C)" / "ICC (A)" (CIF/CIP)
     # Mode vocabulary (spread from _sea_vocab / _any_vocab).
     transport_noun: str = ""
@@ -169,9 +174,20 @@ class Profile:
 
     @property
     def has_buyer_import_clearance(self) -> bool:
-        # DAP/DPU: the buyer's B7 import clearance duty is first-class because
-        # its violation is the rule's B3(a) premature-transfer trigger.
-        return "import_clearance_violated" in self.b3_triggers
+        return self.buyer_import_clearance
+
+    @property
+    def has_buyer_full_clearance(self) -> bool:
+        # EXW: the buyer carries out and pays for ALL clearance formalities -
+        # export, transit, and import (the seller only assists on request).
+        return self.term_type == "E"
+
+    @property
+    def has_security_compliance(self) -> bool:
+        # A4 (2020): every rule except EXW puts a transport-security compliance
+        # duty on the seller - up to delivery (E/F) or for the transport to the
+        # destination (C/D).
+        return self.term_type != "E"
 
     @property
     def has_schedule_notice(self) -> bool:
@@ -245,17 +261,19 @@ def load_rules() -> dict[str, RuleConfig]:
 def _params_tail(term: str, vocab: dict, insurance: bool, buyer_import: bool = False) -> str:
     # noticeDays: F-terms use it for the nomination deadline; the other rules
     # (Wave 2) use it for the conditional B10 schedule notice (oNotifySchedule).
+    # importDays: deadline of the buyer's clearance obligation (all rules whose
+    # import clearance the ICC table assigns to the buyer; for EXW it bounds
+    # the buyer's full export/transit/import clearance).
     if term == "F":
-        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number"
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number"
     elif term == "C":
-        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, carriageDays: Number, deliveryDays: Number, paymentDays: Number"
+        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number"
     elif term == "D":
         # Delivery is at destination; there is no separate origin place param.
-        # DAP/DPU add the buyer's import-clearance deadline (importDays).
         days = "carriageDays: Number, importDays: Number, deliveryDays: Number" if buyer_import else "carriageDays: Number, deliveryDays: Number"
         tail = f"  {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, {days}, paymentDays: Number"
-    else:  # "E": EXW — goods made available at the seller's premises, nothing else.
-        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number"
+    else:  # "E": EXW — goods made available at the seller's premises.
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number"
     if insurance:
         tail += ", insuranceCover: String"
     return tail
@@ -509,7 +527,10 @@ def profile_for(c: RuleConfig) -> Profile:
     if spec is None:
         raise NotImplementedError(f"no profile for {c.code} yet")
     vocab = _sea_vocab() if spec["family"] == "sea" else _any_vocab()
-    buyer_import = "import_clearance_violated" in c.b3_triggers
+    # Buyer-side clearance obligation: every non-EXW rule whose import
+    # clearance the ICC table assigns to the buyer (EXW's buyer clears
+    # everything and gets the full-clearance obligation instead).
+    buyer_import = c.import_clearance == "buyer" and spec["term_type"] != "E"
     tail = _params_tail(spec["term_type"], vocab, spec["has_insurance"], buyer_import)
     cover = c.insurance_cover if spec["has_insurance"] else None
     dpp = _delivery_place_param(spec["term_type"], vocab)
@@ -517,6 +538,7 @@ def profile_for(c: RuleConfig) -> Profile:
                    delivery_place_param=dpp, b3_triggers=list(c.b3_triggers),
                    assist_to_buyer=list(c.assistance.get("to_buyer") or []),
                    assist_to_seller=list(c.assistance.get("to_seller") or []),
+                   buyer_import_clearance=buyer_import,
                    **spec, **vocab)
 
 
@@ -558,8 +580,9 @@ def emit_domain(c: RuleConfig) -> list[str]:
         ]
     if p.has_nomination:
         L += [
-            f"  // Buyer nominates the {p.transport_noun} and gives notice (name, {p.nomination_place_word}, deadline).",
-            f"  {p.nomination_event} isAn Event with Env {p.nomination_name_attr}: String, Env {p.nomination_place_attr}: String, dueDate: Date, performer: Buyer, controller: Buyer;",
+            f"  // Buyer nominates the {p.transport_noun} and gives notice (name, {p.nomination_place_word},",
+            "  // transport-security requirements, deadline) - the typed B10 content.",
+            f"  {p.nomination_event} isAn Event with Env {p.nomination_name_attr}: String, Env {p.nomination_place_attr}: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;",
         ]
     if p.has_schedule_notice:
         L += [
@@ -567,7 +590,7 @@ def emit_domain(c: RuleConfig) -> list[str]:
             "  // determine the time and/or point of delivery (recorded by ScheduleRightAgreed);",
             "  // the buyer must then give sufficient notice in time.",
             "  ScheduleRightAgreed isAn Event with performer: Buyer, controller: Buyer;",
-            "  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, dueDate: Date, performer: Buyer, controller: Buyer;",
+            "  ScheduleNotified isAn Event with Env chosenDate: Date, Env chosenPoint: String, Env securityRequirements: String, dueDate: Date, performer: Buyer, controller: Buyer;",
         ]
     if p.third_party_failure:
         ev, _ = p.third_party_failure
@@ -606,9 +629,23 @@ def emit_domain(c: RuleConfig) -> list[str]:
         ]
     if p.has_buyer_import_clearance:
         L += [
-            "  // B7: the buyer carries out and pays for import (and transit) clearance",
-            "  // formalities - licences, security clearance, duties - in time for delivery.",
+            "  // B7 ('where applicable'): the buyer carries out and pays for transit and",
+            "  // import clearance formalities - licences, security clearance, pre-shipment",
+            "  // inspection, duties - in time for delivery/receipt.",
             "  ImportClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;",
+        ]
+    if p.has_buyer_full_clearance:
+        L += [
+            "  // B7 EXW ('where applicable'): the buyer carries out and pays for ALL",
+            "  // clearance formalities - export, transit AND import (the seller only",
+            "  // assists on request; see the assistance channel).",
+            "  ClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;",
+        ]
+    if p.has_security_compliance:
+        L += [
+            "  // A4 (2020): the seller complies with transport-related security requirements",
+            f"  // {'up to delivery' if p.term_type == 'F' else 'for the transport to the destination'}.",
+            "  SecurityComplied isAn Event with performer: Seller, controller: Seller;",
         ]
     if p.has_insurance:
         L += [
@@ -741,6 +778,10 @@ def emit_declarations(c: RuleConfig) -> list[str]:
         L += ["  importCleared: ImportCleared with performer := seller, controller := seller;"]
     if p.has_buyer_import_clearance:
         L += ["  importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;"]
+    if p.has_buyer_full_clearance:
+        L += ["  clearedByBuyer: ClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;"]
+    if p.has_security_compliance:
+        L += ["  securityComplied: SecurityComplied with performer := seller, controller := seller;"]
     if p.has_insurance:
         L += [
             "  insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;",
@@ -826,6 +867,21 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             f"  // A7: the seller clears the goods for export before {p.export_before_phrase}.",
             f"  oExportClearance: O(seller, buyer, true, {before});",
         ]
+    if p.has_security_compliance:
+        if p.term_type == "F":
+            sec = (
+                f"ShappensBefore(securityComplied, {p.delivery_var})\n"
+                f"              or ShappensBefore(securityComplied, procuredSoDelivered)"
+            )
+            sec_comment = "  // A4 (2020): the seller complies with transport-security requirements up to delivery."
+        else:
+            sec = "Happens(securityComplied)"
+            sec_comment = (
+                "  // A4 (2020): the seller complies with transport-security requirements for"
+                "\n  // the transport to the destination (beyond the origin delivery event, so"
+                "\n  // not bounded by it)."
+            )
+        L += [sec_comment, f"  oSecurityCompliance: O(seller, buyer, true, {sec});"]
     if p.has_seller_carriage:
         L += [
             f"  // A4: the seller contracts carriage to the named {p.carriage_dest_word}, at its own cost, in time.",
@@ -954,10 +1010,22 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             "              WhappensBefore(scheduleNotified, scheduleNotified.dueDate));",
         ]
     if p.has_buyer_import_clearance:
+        b7_comment = (
+            "  // B7: the buyer clears the goods for import (licences, security clearance,\n"
+            "  // duties) in time; its failure is this rule's B3(a) premature-transfer trigger."
+            if "import_clearance_violated" in p.b3_triggers else
+            "  // B7 ('where applicable'): the buyer carries out and pays for transit and\n"
+            "  // import clearance formalities in time."
+        )
         L += [
-            "  // B7: the buyer clears the goods for import (licences, security clearance,",
-            "  // duties) in time; its failure is this rule's B3(a) premature-transfer trigger.",
+            b7_comment,
             "  oImportClearanceBuyer: O(buyer, seller, true, WhappensBefore(importClearedByBuyer, importClearedByBuyer.dueDate));",
+        ]
+    if p.has_buyer_full_clearance:
+        L += [
+            "  // B7 EXW ('where applicable'): the buyer carries out and pays for all",
+            "  // export, transit and import clearance formalities.",
+            "  oClearanceBuyer: O(buyer, seller, true, WhappensBefore(clearedByBuyer, clearedByBuyer.dueDate));",
         ]
     L += [
         f"  // B2: the buyer takes delivery of the goods once they are {p.take_phrase}.",

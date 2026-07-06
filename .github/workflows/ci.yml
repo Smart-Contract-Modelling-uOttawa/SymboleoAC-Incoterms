@@ -1,46 +1,66 @@
 # Compile gate: every specs/*.symboleo must compile with 0 errors.
 #
-# SKELETON — the spawned session must wire up how CODEGEN_JAR is produced
-# (build from SymboleoAC2SC, or fetch a released/vendored codegen-cli jar).
-# Left as a documented placeholder so the first real run is a deliberate step.
+# The gate POSTs each spec to the deployed SymboleoAC-Web bridge's /generate
+# endpoint (same codegen the Web IDE uses) and checks summary.errors == 0.
+# No compiler jar or Maven build is needed in CI. Local dev uses the jar
+# instead — see tests/compile/run.sh (both backends) and ../../CLAUDE.md.
+#
+# Override the backend by setting a repo variable BACKEND_URL
+# (Settings -> Secrets and variables -> Actions -> Variables); otherwise the
+# default below (the current VPS) is used.
 
 name: compile-specs
 
 on:
   push:
-    paths: ['specs/**', '.github/workflows/ci.yml']
+    paths: ['specs/**', 'generator/**', 'tests/**', '.github/workflows/ci.yml']
   pull_request:
-    paths: ['specs/**']
+    paths: ['specs/**', 'generator/**', 'tests/**', '.github/workflows/ci.yml']
   workflow_dispatch:
 
 jobs:
   compile:
     runs-on: ubuntu-latest
+    env:
+      BACKEND_URL: ${{ vars.BACKEND_URL || 'https://159-69-216-244.sslip.io' }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      # jq and curl are preinstalled on ubuntu-latest; assert jq to be explicit.
+      - name: Tooling
+        run: jq --version
+
+      - name: Compile every spec (remote gate)
+        run: bash tests/compile/run.sh specs
+
+  # The specs must be generator output, not hand-edited (STRATEGY ground rule 2).
+  regen-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          distribution: temurin
-          java-version: '21'
+          python-version: '3.12'
+      - run: pip install pyyaml
+      - name: Specs match the generator
+        run: python generator/generate.py --check
 
-      # TODO: produce the SymboleoAC compiler fat jar and export CODEGEN_JAR.
-      # Option A — build from SymboleoAC2SC:
-      #   - run: git clone --depth 1 https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC2SC.git
-      #   - run: (cd SymboleoAC2SC/<cli-module> && mvn -B clean package)
-      #   - run: echo "CODEGEN_JAR=$PWD/SymboleoAC2SC/<cli-module>/target/<jar>" >> "$GITHUB_ENV"
-      # Option B — download a released codegen-cli jar and set CODEGEN_JAR to it.
-
-      - name: Compile every spec
-        run: |
-          set -euo pipefail
-          if [ -z "${CODEGEN_JAR:-}" ]; then
-            echo "CODEGEN_JAR is not set — wire up the compiler jar (see TODO above)."; exit 1
-          fi
-          fail=0
-          for f in specs/*.symboleo; do
-            echo "== $f =="
-            out=$(java -jar "$CODEGEN_JAR" < "$f") || true
-            echo "$out" | grep -q '"errors":0' || { echo "FAILED: $f"; echo "$out"; fail=1; }
-          done
-          exit $fail
+  # Scenario execution: happy path + breach per rule on the generated JS.
+  scenarios:
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_URL: ${{ vars.BACKEND_URL || 'https://159-69-216-244.sslip.io' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install
+        working-directory: tests/scenarios
+        run: npm ci
+      - name: Generate JS from every spec (remote codegen)
+        working-directory: tests/scenarios
+        run: npm run gen
+      - name: Run scenario tests
+        working-directory: tests/scenarios
+        run: node --test

@@ -1,0 +1,65 @@
+Domain exwDomain
+  // EXW - Ex Works (Incoterms 2020), named place (the seller's premises); any mode.
+  // Minimum seller obligation: the goods are placed at the buyer's disposal at the
+  // seller's premises; risk passes there and the buyer bears everything onward.
+  Seller isA Role with name: String, org: String, dept: String;
+  Buyer isA Role with name: String, org: String, dept: String;
+  Currency isAn Enumeration(CAD, USD, EUR);
+  // The goods sold; owner defaults to the seller until delivery.
+  Goods isAn Asset with description: String, quantity: Number, owner: Seller;
+  // Delivery: seller makes the goods available at its premises (risk passes).
+  GoodsMadeAvailable isAn Event with place: String, Env availableDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // Buyer takes delivery of the goods.
+  GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Buyer pays the price.
+  Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
+endDomain
+
+Contract EXW (
+  sellerP: Seller, buyerP: Buyer,
+  goodsDesc: String, qty: Number, price: Number, curr: Currency,
+  placeOfDelivery: String, effDate: Date, deliveryDays: Number, paymentDays: Number
+)
+
+Declarations
+  seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;
+  buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
+  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
+  goodsMadeAvailable: GoodsMadeAvailable with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
+
+Preconditions
+  goods.quantity > 0;
+
+Obligations
+  // A2 delivery: the seller places the goods at the buyer's disposal at its own
+  // premises (the named place) before the deadline; risk passes to the buyer there.
+  oDeliver: O(seller, buyer, true,
+              WhappensBefore(goodsMadeAvailable, goodsMadeAvailable.delDueDate)
+              and goodsMadeAvailable.place == placeOfDelivery);
+  // B2: the buyer takes delivery of the goods once they are at the seller's premises.
+  oTakeDelivery: Happens(goodsMadeAvailable) -> O(buyer, seller, true, Happens(goodsTakenOver));
+
+Surviving Obligations
+  // B1: the buyer must pay the price for goods delivered at the seller's premises and evidenced
+  // by their collection; this survives termination of the contract.
+  oPay: (Happens(goodsMadeAvailable) and Happens(goodsTakenOver)) -> Obligation(buyer, seller, true,
+              WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+
+Powers
+  // If the seller fails to deliver at the seller's premises, the buyer may terminate the contract.
+  pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));
+  // If the buyer fails to take delivery, the seller may terminate the contract.
+  pTerminateBySeller: Happens(Violated(obligations.oTakeDelivery)) -> P(seller, buyer, true, Terminated(self));
+
+ACPolicy with Controller seller
+  Rule1: Grant read To buyer On goods.description by seller;
+  Rule2: Grant read To buyer On obligations.oDeliver by seller;
+  Rule3: Grant read To buyer On goodsMadeAvailable by seller;
+  Rule4: Grant write To buyer On powers.pTerminateByBuyer by seller;
+
+Constraints
+  not(IsEqual(buyer, seller));
+
+endContract

@@ -3,10 +3,39 @@
 Project to formalize the 11 Incoterms 2020 rules as SymboleoAC contracts, with a
 coverage analysis and validation, backing a paper. Read `STRATEGY.md` first.
 
+## Status (updated 2026-07-05)
+
+**All 11 rules are done and validated; CI is green.** Open PR: #1 (branch
+`claude/vigilant-cohen-4c817b` → `main`). Where things live:
+
+- `generator/generate.py` — table-driven generator (two axes: **term type E/F/C/D**
+  × **family sea/any_mode**, plus feature switches), driven by
+  `generator/incoterms.data.yaml`. Emits all of `specs/*.symboleo`. Roles carry
+  `name, org, dept` (see grammar note below). `--check` = the regen guard.
+- `specs/` — the 11 generated specs, each compiling **0 errors / 0 warnings**.
+- `tests/compile/run.{sh,ps1}` — compile gate. CI uses the **remote bridge**
+  (`BACKEND_URL`, default `https://159-69-216-244.sslip.io`); local dev uses the
+  **jar** (`CODEGEN_JAR`). Same JSON either way.
+- `tests/scenarios/` — **44 Node tests** (11 happy + 25 breach/suspend + 8
+  structural/differential) on the generated JS; `npm run coverage` (c8) ≈90% line.
+- `coverage/coverage-matrix.md` — fully filled A1–A10/B1–B10 × 11, with
+  cross-cutting differential notes.
+- `deploy/README.md` — **verified** Hyperledger Fabric deployment guide (FOB was
+  deployed on-chain and its access-control policy enforced); records the toolchain
+  fixes. `deploy/issue-symboleoac2sc-dept.md` → filed as SymboleoAC2SC#1.
+- `paper/` — the JURIX 2026 draft. **LOCAL ONLY — deliberately NOT committed**
+  (git-excluded via the common-dir `.git/info/exclude`). Builds with
+  `tectonic main.tex`. Do not `git add` it.
+
+CI jobs: `compile` (remote gate), `regen-check` (`generate.py --check`),
+`scenarios` (`node --test`). Keep all three green.
+
 ## What compiles: hard-won grammar facts (from the FOB seed)
 
-`specs/FOB.symboleo` compiles with **0 errors / 0 warnings** and is the golden
-reference. Facts verified against the real compiler and the Xtext grammar
+All 11 `specs/*.symboleo` compile with **0 errors / 0 warnings**. (FOB was the
+original hand-written golden reference, reproduced byte-for-byte; the specs are now
+defined purely by `generator/generate.py` and pinned by the regen guard.) Facts
+verified against the real compiler and the Xtext grammar
 (https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC2SC):
 
 - **Obligation:** `id: [trigger ->] O(debtor, creditor, antecedent, consequent) [with Controller ctrl]`.
@@ -36,6 +65,12 @@ reference. Facts verified against the real compiler and the Xtext grammar
   avoid pointing a power at a surviving obligation until checked.
 - `Date.add(datePoint, n, days)` — time units: seconds|minutes|hours|days|weeks|months|years.
   `TimeGranularity is days` is optional.
+- **Roles need a `dept` attribute for access control.** Declare roles as
+  `X isA Role with name: String, org: String, dept: String;`. The generated AC
+  `authenticate` matches a caller cert's `HF.name`/`HF.role`/`organization`/
+  `department` against a role and checks `department === objRole.dept._value`, so a
+  role without `dept` cannot be authorized on-chain (returns "Unauthorized" /
+  throws). Filed upstream as SymboleoAC2SC#1; the generator already emits it.
 
 ## Compile a spec (the validation gate)
 
@@ -67,3 +102,7 @@ Domain / Rules / Policy views.
 3. Record every coverage finding in `coverage/coverage-matrix.md` as you go
    (with the modelling device or the gap + rationale).
 4. Prefer verifying with a compile/scenario run over reasoning about the grammar.
+5. **Never `git add` `paper/`** — the JURIX draft is deliberately local-only.
+6. Known upstream codegen bug: the generated `createSurvivingObligation_*` uses an
+   undeclared `isNewInstance` and crashes at runtime; `tests/scenarios/generate.mjs`
+   (`patchCodegen`) rewrites it to `true`. Fix belongs in SymboleoAC2SC.

@@ -1,0 +1,817 @@
+#!/usr/bin/env python3
+"""Table-driven SymboleoAC generator for the Incoterms 2020 rules.
+
+Reads the ICC allocation tables (``incoterms.data.yaml``) and emits one
+``specs/<CODE>.symboleo`` per rule from a shared domain ontology + a library of
+norm templates. The 11 specs are kept structurally parallel — they share the
+vocabulary and the template *shapes* — while each declares only the
+events/assets/norms that its Incoterms rule actually uses (faithful per-rule
+modelling). The varying tokens live in a per-rule ``Profile``.
+
+Two orthogonal axes drive the templates:
+  * term_type — **F** (buyer contracts carriage + nominates the vessel/carrier;
+    oNominateX + suspend/resume powers) vs **C** (seller contracts carriage to
+    destination; oContractCarriage + pTerminateNoCarriage; risk still passes at
+    the origin delivery point while cost runs to destination). CIF/CIP add a
+    seller insurance obligation (cover level is data only).
+  * family — **sea** (vessel / port / on-board or alongside / bill of lading) vs
+    **any_mode** (carrier / place / handover to the (first) carrier).
+
+Implemented: all 11 rules. FOB was originally factored out of a hand-written
+golden spec (reproduced byte-for-byte); roles later gained a `dept: String`
+attribute required by the SymboleoAC access-control authenticate for on-chain
+deployment (see deploy/README.md), so the specs are now defined purely by this
+generator and pinned by the CI regeneration guard.
+
+Usage:
+    python generator/generate.py [--only FOB[,FCA,...]] [--out specs] [--check]
+    python generator/generate.py --stdout FOB      # print one spec, emit nothing
+
+``--check`` diffs generated output against the committed specs instead of
+overwriting them (used by CI / the regeneration guard).
+
+Output is LF-terminated (see .gitattributes: *.symboleo eol=lf) and deterministic.
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    sys.exit("PyYAML is required: pip install pyyaml")
+
+REPO = Path(__file__).resolve().parent.parent
+DATA = REPO / "generator" / "incoterms.data.yaml"
+NL = "\n"
+
+# Which rules the emitters currently reproduce (grows as rules land).
+IMPLEMENTED = ["CFR", "CIF", "CIP", "CPT", "DAP", "DDP", "DPU", "EXW", "FAS", "FCA", "FOB"]
+
+
+# --- mode vocabulary ---------------------------------------------------------
+# The sea/any_mode families name the same roles differently. Keeping the tokens
+# in one place lets the shared templates stay mode-agnostic.
+
+def _sea_vocab() -> dict:
+    return dict(
+        transport_noun="vessel",
+        nomination_event="VesselNominated",
+        nomination_var="vesselNominated",
+        nomination_name_attr="vesselName",
+        nomination_place_attr="loadingPort",
+        nominate_obl="oNominateVessel",
+        nomination_place_word="loading point",
+        delivery_place_attr="port",
+        origin_param="portOfShipment",
+        carriage_dest_attr="destinationPort",
+        carriage_dest_word="destination port",
+        dest_param="portOfDestination",
+    )
+
+
+def _any_vocab() -> dict:
+    return dict(
+        transport_noun="carrier",
+        nomination_event="CarrierNominated",
+        nomination_var="carrierNominated",
+        nomination_name_attr="carrierName",
+        nomination_place_attr="namedPlace",
+        nominate_obl="oNominateCarrier",
+        nomination_place_word="place",
+        delivery_place_attr="place",
+        origin_param="placeOfDelivery",
+        carriage_dest_attr="destinationPlace",
+        carriage_dest_word="destination",
+        dest_param="placeOfDestination",
+    )
+
+
+# --- rule configuration ------------------------------------------------------
+
+
+@dataclass
+class Profile:
+    """The per-rule tokens the shared templates vary on (faithful modelling)."""
+
+    term_type: str               # "F" (buyer nominates) | "C" (seller carriage)
+    family: str                  # "sea" | "any_mode"
+    domain_comment: list[str]    # the lines under `Domain <x>`
+    # Delivery event (where risk passes).
+    delivery_event: str          # e.g. "LoadedOnBoard"
+    delivery_var: str            # e.g. "loadedOnBoard"
+    delivery_date_attr: str      # Env date attr, e.g. "onBoardDate"
+    delivery_domain_comment: str
+    documents_domain_comment: str
+    contract_params_tail: str    # the places/deadlines param line
+    # Short phrases woven into the norm comments.
+    point_phrase: str            # "delivered <X>": "on board" | "to the carrier"
+    take_phrase: str             # "once they are <X>": "on board" | "with the carrier"
+    export_before_phrase: str    # "they go on board" | "they are handed to the carrier"
+    deliver_place_phrase: str    # F-terms: "on board it" | "to the carrier"
+    provide_docs_line2: str      # 2nd comment line of the carrier-document norm
+    proof_docs_comment: list[str]  # comment for the proof-only (no carrier doc) norm
+    c_deliver_comment: list[str]   # C-term oDeliver comment (2 lines)
+    # Feature switches (approach A: declare only what the rule uses).
+    has_carrier: bool            # Carrier role + carrier-issued bill of lading
+    has_bol: bool
+    has_insurance: bool
+    has_export_clearance: bool = True   # False for EXW (buyer clears export)
+    has_documents: bool = True          # False for EXW (no seller document norm)
+    has_import_clearance: bool = False  # True for DDP (seller clears import)
+    delivery_place_param: str = ""      # contract param the delivery place equals
+    pay_second_conjunct: str = "documentsProvided"  # 2nd Happens() in oPay trigger
+    pay_evidence: str = ""              # "evidenced by <X>" (default: per has_bol)
+    insurance_cover: str | None = None
+    insurance_cover_phrase: str = ""   # e.g. "ICC (C)" / "ICC (A)" (CIF/CIP)
+    # Mode vocabulary (spread from _sea_vocab / _any_vocab).
+    transport_noun: str = ""
+    nomination_event: str = ""
+    nomination_var: str = ""
+    nomination_name_attr: str = ""
+    nomination_place_attr: str = ""
+    nominate_obl: str = ""
+    nomination_place_word: str = ""
+    delivery_place_attr: str = ""
+    origin_param: str = ""
+    carriage_dest_attr: str = ""
+    carriage_dest_word: str = ""
+    dest_param: str = ""
+
+    @property
+    def has_nomination(self) -> bool:
+        return self.term_type == "F"
+
+    @property
+    def has_seller_carriage(self) -> bool:
+        # C-terms (carriage to destination) and D-terms (delivery at destination
+        # requires it) both put carriage on the seller.
+        return self.term_type in ("C", "D")
+
+    @property
+    def delivers_at_destination(self) -> bool:
+        return self.term_type == "D"
+
+
+@dataclass
+class RuleConfig:
+    """One rule's generation inputs: the YAML row plus a derived Profile."""
+
+    code: str
+    name: str
+    family: str  # sea | any_mode
+    delivery_point: str
+    seller_insurance: bool
+    export_clearance: str  # seller | buyer
+    import_clearance: str
+    cost: list[str]
+    insurance_cover: str | None = None
+    profile: Profile = field(init=False)
+
+    @property
+    def domain_name(self) -> str:
+        return f"{self.code.lower()}Domain"
+
+
+def load_rules() -> dict[str, RuleConfig]:
+    doc = yaml.safe_load(DATA.read_text(encoding="utf-8"))
+    rules: dict[str, RuleConfig] = {}
+    for code, row in doc["rules"].items():
+        rules[code] = RuleConfig(
+            code=code,
+            name=row["name"],
+            family=row["family"],
+            delivery_point=row["delivery_point"],
+            seller_insurance=bool(row["seller_insurance"]),
+            export_clearance=row["export_clearance"],
+            import_clearance=row["import_clearance"],
+            cost=list(row["cost"]),
+            insurance_cover=row.get("insurance_cover"),
+        )
+    return rules
+
+
+def _params_tail(term: str, vocab: dict, insurance: bool) -> str:
+    if term == "F":
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, deliveryDays: Number, paymentDays: Number"
+    elif term == "C":
+        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, carriageDays: Number, deliveryDays: Number, paymentDays: Number"
+    elif term == "D":
+        # Delivery is at destination; there is no separate origin place param.
+        tail = f"  {vocab['dest_param']}: String, effDate: Date, carriageDays: Number, deliveryDays: Number, paymentDays: Number"
+    else:  # "E": EXW — goods made available at the seller's premises, nothing else.
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, deliveryDays: Number, paymentDays: Number"
+    if insurance:
+        tail += ", insuranceCover: String"
+    return tail
+
+
+def _delivery_place_param(term: str, vocab: dict) -> str:
+    # Where the delivery event happens: origin for F/C/E, destination for D.
+    return vocab["dest_param"] if term == "D" else vocab["origin_param"]
+
+
+# Per-rule specifics (everything not fixed by term_type/family/vocab).
+_SPECIFICS = {
+    "FOB": dict(
+        term_type="F", family="sea",
+        domain_comment=[
+            "  // FOB - Free on Board (Incoterms 2020), named port of shipment.",
+            "  // Seller bears cost and risk up to the moment the goods are on board the",
+            "  // vessel nominated by the buyer; risk then passes to the buyer.",
+        ],
+        delivery_event="LoadedOnBoard", delivery_var="loadedOnBoard", delivery_date_attr="onBoardDate",
+        delivery_domain_comment="  // Delivery: seller places the goods on board the nominated vessel (risk passes).",
+        documents_domain_comment="  // Seller hands the buyer the usual proof of delivery (the bill of lading).",
+        point_phrase="on board", take_phrase="on board",
+        export_before_phrase="they go on board", deliver_place_phrase="on board it",
+        provide_docs_line2="  // provides the buyer with that proof of delivery.",
+        proof_docs_comment=[], c_deliver_comment=[],
+        has_carrier=True, has_bol=True, has_insurance=False,
+    ),
+    "FAS": dict(
+        term_type="F", family="sea",
+        domain_comment=[
+            "  // FAS - Free Alongside Ship (Incoterms 2020), named port of shipment.",
+            "  // Seller bears cost and risk up to the moment the goods are placed alongside",
+            "  // the vessel nominated by the buyer; risk then passes to the buyer.",
+        ],
+        delivery_event="DeliveredAlongside", delivery_var="deliveredAlongside", delivery_date_attr="alongsideDate",
+        delivery_domain_comment="  // Delivery: seller places the goods alongside the nominated vessel (risk passes).",
+        documents_domain_comment="  // Seller hands the buyer the usual proof that the goods were delivered alongside.",
+        point_phrase="alongside", take_phrase="alongside",
+        export_before_phrase="they are placed alongside", deliver_place_phrase="alongside it",
+        provide_docs_line2="",
+        proof_docs_comment=[
+            "  // A6: after delivery alongside, the seller provides the buyer with the usual",
+            "  // proof that the goods were delivered alongside the vessel.",
+        ],
+        c_deliver_comment=[],
+        has_carrier=False, has_bol=False, has_insurance=False,
+    ),
+    "CFR": dict(
+        term_type="C", family="sea",
+        domain_comment=[
+            "  // CFR - Cost and Freight (Incoterms 2020), named port of destination.",
+            "  // Seller delivers on board and bears cost (freight) to the destination port,",
+            "  // but risk passes to the buyer when the goods are on board at shipment.",
+        ],
+        delivery_event="LoadedOnBoard", delivery_var="loadedOnBoard", delivery_date_attr="onBoardDate",
+        delivery_domain_comment="  // Delivery: seller places the goods on board the vessel (risk passes on board).",
+        documents_domain_comment="  // Seller tenders the buyer the bill of lading for the destination port.",
+        point_phrase="on board", take_phrase="on board",
+        export_before_phrase="they go on board", deliver_place_phrase="",
+        provide_docs_line2="  // tenders it to the buyer as the usual transport document.",
+        proof_docs_comment=[],
+        c_deliver_comment=[
+            "  // A2 delivery: the seller places the goods on board the vessel at the port of",
+            "  // shipment before the deadline; risk passes to the buyer on board.",
+        ],
+        has_carrier=True, has_bol=True, has_insurance=False,
+    ),
+    "CIF": dict(
+        term_type="C", family="sea",
+        domain_comment=[
+            "  // CIF - Cost, Insurance and Freight (Incoterms 2020), named port of destination.",
+            "  // Seller delivers on board and bears cost (freight + insurance) to the",
+            "  // destination port; risk passes to the buyer when the goods are on board.",
+        ],
+        delivery_event="LoadedOnBoard", delivery_var="loadedOnBoard", delivery_date_attr="onBoardDate",
+        delivery_domain_comment="  // Delivery: seller places the goods on board the vessel (risk passes on board).",
+        documents_domain_comment="  // Seller tenders the buyer the bill of lading for the destination port.",
+        point_phrase="on board", take_phrase="on board",
+        export_before_phrase="they go on board", deliver_place_phrase="",
+        provide_docs_line2="  // tenders it to the buyer as the usual transport document.",
+        proof_docs_comment=[],
+        c_deliver_comment=[
+            "  // A2 delivery: the seller places the goods on board the vessel at the port of",
+            "  // shipment before the deadline; risk passes to the buyer on board.",
+        ],
+        has_carrier=True, has_bol=True, has_insurance=True, insurance_cover_phrase="ICC (C)",
+    ),
+    "FCA": dict(
+        term_type="F", family="any_mode",
+        domain_comment=[
+            "  // FCA - Free Carrier (Incoterms 2020), named place of delivery; any transport mode.",
+            "  // Seller delivers by handing the goods to the carrier nominated by the buyer;",
+            "  // risk then passes to the buyer at that handover.",
+        ],
+        delivery_event="HandedToCarrier", delivery_var="handedToCarrier", delivery_date_attr="handoverDate",
+        delivery_domain_comment="  // Delivery: seller hands the goods to the buyer's carrier at the named place (risk passes).",
+        documents_domain_comment="  // Seller hands the buyer the usual proof of delivery to the carrier.",
+        point_phrase="to the carrier", take_phrase="with the carrier",
+        export_before_phrase="they are handed to the carrier", deliver_place_phrase="to the carrier",
+        provide_docs_line2="",
+        proof_docs_comment=[
+            "  // A6: after handing the goods to the carrier, the seller provides the buyer",
+            "  // with the usual proof that the goods were delivered.",
+        ],
+        c_deliver_comment=[],
+        has_carrier=False, has_bol=False, has_insurance=False,
+    ),
+    "CPT": dict(
+        term_type="C", family="any_mode",
+        domain_comment=[
+            "  // CPT - Carriage Paid To (Incoterms 2020), named place of destination; any mode.",
+            "  // Seller contracts carriage to destination and hands the goods to the first",
+            "  // carrier; risk passes at that handover, while cost runs to the destination.",
+        ],
+        delivery_event="HandedToFirstCarrier", delivery_var="handedToFirstCarrier", delivery_date_attr="handoverDate",
+        delivery_domain_comment="  // Delivery: seller hands the goods to the first carrier it contracted (risk passes on handover).",
+        documents_domain_comment="  // Seller tenders the buyer the usual transport document for the carriage.",
+        point_phrase="to the carrier", take_phrase="with the carrier",
+        export_before_phrase="they are handed to the carrier", deliver_place_phrase="",
+        provide_docs_line2="",
+        proof_docs_comment=[
+            "  // A6: the seller provides the buyer with the usual transport document for the",
+            "  // carriage it has contracted to the destination.",
+        ],
+        c_deliver_comment=[
+            "  // A2 delivery: the seller hands the goods to the first carrier at the named",
+            "  // place of delivery before the deadline; risk passes to the buyer on handover.",
+        ],
+        has_carrier=False, has_bol=False, has_insurance=False,
+    ),
+    "CIP": dict(
+        term_type="C", family="any_mode",
+        domain_comment=[
+            "  // CIP - Carriage and Insurance Paid To (Incoterms 2020), named destination; any mode.",
+            "  // Seller contracts carriage + insurance to destination and hands to the first",
+            "  // carrier; risk passes at handover, while cost (incl. insurance) runs onward.",
+        ],
+        delivery_event="HandedToFirstCarrier", delivery_var="handedToFirstCarrier", delivery_date_attr="handoverDate",
+        delivery_domain_comment="  // Delivery: seller hands the goods to the first carrier it contracted (risk passes on handover).",
+        documents_domain_comment="  // Seller tenders the buyer the usual transport document for the carriage.",
+        point_phrase="to the carrier", take_phrase="with the carrier",
+        export_before_phrase="they are handed to the carrier", deliver_place_phrase="",
+        provide_docs_line2="",
+        proof_docs_comment=[
+            "  // A6: the seller provides the buyer with the usual transport document for the",
+            "  // carriage it has contracted to the destination.",
+        ],
+        c_deliver_comment=[
+            "  // A2 delivery: the seller hands the goods to the first carrier at the named",
+            "  // place of delivery before the deadline; risk passes to the buyer on handover.",
+        ],
+        has_carrier=False, has_bol=False, has_insurance=True, insurance_cover_phrase="ICC (A)",
+    ),
+    "DAP": dict(
+        term_type="D", family="any_mode",
+        domain_comment=[
+            "  // DAP - Delivered At Place (Incoterms 2020), named place of destination; any mode.",
+            "  // Seller bears cost and risk all the way to destination and places the goods",
+            "  // at the buyer's disposal there, ready for unloading; risk passes at destination.",
+        ],
+        delivery_event="MadeAvailableAtDestination", delivery_var="madeAvailable", delivery_date_attr="arrivalDate",
+        delivery_domain_comment="  // Delivery: seller makes the goods available at the destination, ready for unloading (risk passes).",
+        documents_domain_comment="  // Seller gives the buyer the document/notice letting it take delivery at destination.",
+        point_phrase="at the destination", take_phrase="at the destination",
+        export_before_phrase="they are dispatched", deliver_place_phrase="",
+        provide_docs_line2="",
+        proof_docs_comment=[
+            "  // A6: the seller provides the buyer with the document/notice that lets it take",
+            "  // delivery of the goods at the named place of destination.",
+        ],
+        c_deliver_comment=[
+            "  // A2 delivery: the seller places the goods at the buyer's disposal, ready for",
+            "  // unloading, at the named place of destination before the deadline; risk passes there.",
+        ],
+        has_carrier=False, has_bol=False, has_insurance=False,
+    ),
+    "DPU": dict(
+        term_type="D", family="any_mode",
+        domain_comment=[
+            "  // DPU - Delivered at Place Unloaded (Incoterms 2020), named destination; any mode.",
+            "  // Seller bears cost and risk to destination and, uniquely, unloads the goods",
+            "  // there before placing them at the buyer's disposal; risk passes once unloaded.",
+        ],
+        delivery_event="UnloadedAtDestination", delivery_var="unloadedAtDestination", delivery_date_attr="unloadDate",
+        delivery_domain_comment="  // Delivery: seller unloads the goods and makes them available at the destination (risk passes).",
+        documents_domain_comment="  // Seller gives the buyer the document/notice letting it take delivery at destination.",
+        point_phrase="at the destination", take_phrase="at the destination",
+        export_before_phrase="they are dispatched", deliver_place_phrase="",
+        provide_docs_line2="",
+        proof_docs_comment=[
+            "  // A6: the seller provides the buyer with the document/notice that lets it take",
+            "  // delivery of the goods at the named place of destination.",
+        ],
+        c_deliver_comment=[
+            "  // A2 delivery: the seller unloads the goods from the arriving means of transport",
+            "  // and places them at the buyer's disposal at the destination before the deadline.",
+        ],
+        has_carrier=False, has_bol=False, has_insurance=False,
+    ),
+    "DDP": dict(
+        term_type="D", family="any_mode",
+        domain_comment=[
+            "  // DDP - Delivered Duty Paid (Incoterms 2020), named place of destination; any mode.",
+            "  // Maximum seller obligation: cost and risk to destination AND import clearance",
+            "  // (duties paid); the goods are placed at the buyer's disposal, cleared, at destination.",
+        ],
+        delivery_event="MadeAvailableAtDestination", delivery_var="madeAvailable", delivery_date_attr="arrivalDate",
+        delivery_domain_comment="  // Delivery: seller makes the import-cleared goods available at the destination (risk passes).",
+        documents_domain_comment="  // Seller gives the buyer the document/notice letting it take delivery at destination.",
+        point_phrase="at the destination", take_phrase="at the destination",
+        export_before_phrase="they are dispatched", deliver_place_phrase="",
+        provide_docs_line2="",
+        proof_docs_comment=[
+            "  // A6: the seller provides the buyer with the document/notice that lets it take",
+            "  // delivery of the goods at the named place of destination.",
+        ],
+        c_deliver_comment=[
+            "  // A2 delivery: the seller places the goods, cleared for import, at the buyer's",
+            "  // disposal at the named place of destination before the deadline; risk passes there.",
+        ],
+        has_carrier=False, has_bol=False, has_insurance=False, has_import_clearance=True,
+    ),
+    "EXW": dict(
+        term_type="E", family="any_mode",
+        domain_comment=[
+            "  // EXW - Ex Works (Incoterms 2020), named place (the seller's premises); any mode.",
+            "  // Minimum seller obligation: the goods are placed at the buyer's disposal at the",
+            "  // seller's premises; risk passes there and the buyer bears everything onward.",
+        ],
+        delivery_event="GoodsMadeAvailable", delivery_var="goodsMadeAvailable", delivery_date_attr="availableDate",
+        delivery_domain_comment="  // Delivery: seller makes the goods available at its premises (risk passes).",
+        documents_domain_comment="",
+        point_phrase="at the seller's premises", take_phrase="at the seller's premises",
+        export_before_phrase="", deliver_place_phrase="",
+        provide_docs_line2="",
+        proof_docs_comment=[],
+        c_deliver_comment=[
+            "  // A2 delivery: the seller places the goods at the buyer's disposal at its own",
+            "  // premises (the named place) before the deadline; risk passes to the buyer there.",
+        ],
+        has_carrier=False, has_bol=False, has_insurance=False,
+        has_export_clearance=False, has_documents=False,
+        pay_second_conjunct="goodsTakenOver", pay_evidence="their collection",
+    ),
+}
+
+
+def profile_for(c: RuleConfig) -> Profile:
+    spec = _SPECIFICS.get(c.code)
+    if spec is None:
+        raise NotImplementedError(f"no profile for {c.code} yet")
+    vocab = _sea_vocab() if spec["family"] == "sea" else _any_vocab()
+    tail = _params_tail(spec["term_type"], vocab, spec["has_insurance"])
+    cover = c.insurance_cover if spec["has_insurance"] else None
+    dpp = _delivery_place_param(spec["term_type"], vocab)
+    return Profile(contract_params_tail=tail, insurance_cover=cover,
+                   delivery_place_param=dpp, **spec, **vocab)
+
+
+# --- section emitters --------------------------------------------------------
+# Each returns the section's lines (no trailing blank line); assemble() joins
+# them with blank separators, matching the golden layout.
+
+
+def emit_domain(c: RuleConfig) -> list[str]:
+    p = c.profile
+    L = [f"Domain {c.domain_name}"]
+    L += p.domain_comment
+    L += [
+        "  Seller isA Role with name: String, org: String, dept: String;",
+        "  Buyer isA Role with name: String, org: String, dept: String;",
+    ]
+    if p.has_carrier:
+        carrier_comment = (
+            "  // The carrier the seller contracts to carry the goods to the destination port; it issues the bill of lading."
+            if p.has_seller_carriage
+            else "  // The carrier operates the vessel the buyer nominates; it issues the bill of lading."
+        )
+        L += [carrier_comment, "  Carrier isA Role thirdParty with name: String, org: String, dept: String;"]
+    L += [
+        "  Currency isAn Enumeration(CAD, USD, EUR);",
+        "  // The goods sold; owner defaults to the seller until delivery.",
+        "  Goods isAn Asset with description: String, quantity: Number, owner: Seller;",
+    ]
+    if p.has_bol:
+        L += [
+            "  // The bill of lading: the transport document evidencing shipment on board.",
+            "  BillOfLading isAn Asset with blNumber: String, owner: Carrier;",
+        ]
+    if p.has_nomination:
+        L += [
+            f"  // Buyer nominates the {p.transport_noun} and gives notice (name, {p.nomination_place_word}, deadline).",
+            f"  {p.nomination_event} isAn Event with Env {p.nomination_name_attr}: String, Env {p.nomination_place_attr}: String, dueDate: Date, performer: Buyer, controller: Buyer;",
+        ]
+    if p.has_export_clearance:
+        L += [
+            "  // Seller clears the goods for export.",
+            "  ExportCleared isAn Event with performer: Seller, controller: Seller;",
+        ]
+    if p.has_seller_carriage:
+        L += [
+            f"  // Seller contracts carriage to the named {p.carriage_dest_word} (and pays the freight).",
+            f"  CarriageContracted isAn Event with {p.carriage_dest_attr}: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;",
+        ]
+    if p.has_import_clearance:
+        L += [
+            "  // Seller also clears the goods for import at the destination (duties paid).",
+            "  ImportCleared isAn Event with performer: Seller, controller: Seller;",
+        ]
+    if p.has_insurance:
+        L += [
+            "  // Seller takes out cargo insurance for the buyer's benefit (level recorded as data).",
+            "  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, performer: Seller, controller: Seller;",
+        ]
+    L += [
+        p.delivery_domain_comment,
+        f"  {p.delivery_event} isAn Event with {p.delivery_place_attr}: String, Env {p.delivery_date_attr}: Date, delDueDate: Date, performer: Seller, controller: Seller;",
+    ]
+    if p.has_bol:
+        L += [
+            "  // Carrier issues the bill of lading once the goods are on board.",
+            "  BillOfLadingIssued isAn Event with Env blNumber: String, performer: Carrier, controller: Carrier;",
+        ]
+    if p.has_documents:
+        L += [
+            p.documents_domain_comment,
+            "  DocumentsProvided isAn Event with performer: Seller, controller: Seller;",
+        ]
+    L += [
+        "  // Buyer takes delivery of the goods.",
+        "  GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;",
+        "  // Buyer pays the price.",
+        "  Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;",
+        "endDomain",
+    ]
+    return L
+
+
+def emit_contract_header(c: RuleConfig) -> list[str]:
+    carrier = "buyerP: Buyer, carrierP: Carrier," if c.profile.has_carrier else "buyerP: Buyer,"
+    return [
+        f"Contract {c.code} (",
+        f"  sellerP: Seller, {carrier}",
+        "  goodsDesc: String, qty: Number, price: Number, curr: Currency,",
+        c.profile.contract_params_tail,
+        ")",
+    ]
+
+
+def emit_declarations(c: RuleConfig) -> list[str]:
+    p = c.profile
+    L = [
+        "Declarations",
+        "  seller: Seller with name := sellerP.name, org := sellerP.org, dept := sellerP.dept;",
+        "  buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;",
+    ]
+    if p.has_carrier:
+        L += ["  carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;"]
+    L += ["  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;"]
+    if p.has_bol:
+        L += ['  billOfLading: BillOfLading with blNumber := "", owner := carrier;']
+    if p.has_nomination:
+        L += [f"  {p.nomination_var}: {p.nomination_event} with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;"]
+    if p.has_export_clearance:
+        L += ["  exportCleared: ExportCleared with performer := seller, controller := seller;"]
+    if p.has_seller_carriage:
+        L += [f"  carriageContracted: CarriageContracted with {p.carriage_dest_attr} := {p.dest_param}, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;"]
+    if p.has_import_clearance:
+        L += ["  importCleared: ImportCleared with performer := seller, controller := seller;"]
+    if p.has_insurance:
+        L += ["  insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;"]
+    L += [
+        f"  {p.delivery_var}: {p.delivery_event} with {p.delivery_place_attr} := {p.delivery_place_param}, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;",
+    ]
+    if p.has_bol:
+        L += ["  billOfLadingIssued: BillOfLadingIssued with performer := carrier, controller := carrier;"]
+    if p.has_documents:
+        L += ["  documentsProvided: DocumentsProvided with performer := seller, controller := seller;"]
+    L += [
+        "  goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;",
+        "  paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;",
+    ]
+    return L
+
+
+def emit_preconditions(c: RuleConfig) -> list[str]:
+    return ["Preconditions", "  goods.quantity > 0;"]
+
+
+def emit_obligations(c: RuleConfig) -> list[str]:
+    p = c.profile
+    L = ["Obligations"]
+    if p.has_export_clearance:
+        L += [
+            f"  // A7: the seller clears the goods for export before {p.export_before_phrase}.",
+            f"  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, {p.delivery_var}));",
+        ]
+    if p.has_seller_carriage:
+        L += [
+            f"  // A4: the seller contracts carriage to the named {p.carriage_dest_word}, at its own cost, in time.",
+            "  oContractCarriage: O(seller, buyer, true,",
+            "              WhappensBefore(carriageContracted, carriageContracted.dueDate)",
+            f"              and carriageContracted.{p.carriage_dest_attr} == {p.dest_param});",
+        ]
+    if p.has_import_clearance:
+        L += [
+            "  // A7 (DDP): the seller also clears the goods for import before delivery at destination.",
+            f"  oImportClearance: O(seller, buyer, true, ShappensBefore(importCleared, {p.delivery_var}));",
+        ]
+    if p.has_insurance:
+        L += [
+            f"  // A5: the seller takes out cargo insurance (min. {p.insurance_cover_phrase}, 110% of price) for the buyer.",
+            f"  oInsure: O(seller, buyer, true, ShappensBefore(insuranceObtained, {p.delivery_var}));",
+        ]
+    if p.has_nomination:
+        L += [
+            f"  // A2 delivery: once the buyer has nominated the {p.transport_noun}, the seller must place",
+            f"  // the goods {p.deliver_place_phrase}, at the named {p.nomination_place_word}, before the deadline.",
+            f"  oDeliver: Happens({p.nomination_var}) -> O(seller, buyer, true,",
+            f"              WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
+            f"              and {p.delivery_var}.{p.delivery_place_attr} == {p.nomination_var}.{p.nomination_place_attr});",
+        ]
+    else:  # C/D/E-term: unconditional delivery at the delivery point
+        L += [
+            p.c_deliver_comment[0],
+            p.c_deliver_comment[1],
+            "  oDeliver: O(seller, buyer, true,",
+            f"              WhappensBefore({p.delivery_var}, {p.delivery_var}.delDueDate)",
+            f"              and {p.delivery_var}.{p.delivery_place_attr} == {p.delivery_place_param});",
+        ]
+    if p.has_documents and p.has_bol:
+        L += [
+            "  // A6: after loading, the carrier issues the bill of lading and the seller",
+            p.provide_docs_line2,
+            f"  oProvideDocuments: Happens({p.delivery_var}) -> O(seller, buyer, true,",
+            "              Happens(billOfLadingIssued) and Happens(documentsProvided));",
+        ]
+    elif p.has_documents:
+        L += [
+            p.proof_docs_comment[0],
+            p.proof_docs_comment[1],
+            f"  oProvideDocuments: Happens({p.delivery_var}) -> O(seller, buyer, true,",
+            "              Happens(documentsProvided));",
+        ]
+    if p.has_nomination:
+        L += [
+            f"  // B7/B10: the buyer nominates the {p.transport_noun} and gives sufficient notice in time.",
+            f"  {p.nominate_obl}: O(buyer, seller, true, WhappensBefore({p.nomination_var}, {p.nomination_var}.dueDate));",
+        ]
+    L += [
+        f"  // B2: the buyer takes delivery of the goods once they are {p.take_phrase}.",
+        f"  oTakeDelivery: Happens({p.delivery_var}) -> O(buyer, seller, true, Happens(goodsTakenOver));",
+    ]
+    return L
+
+
+def emit_surviving(c: RuleConfig) -> list[str]:
+    p = c.profile
+    evidence = p.pay_evidence or ("the bill of lading" if p.has_bol else "the usual proof of delivery")
+    return [
+        "Surviving Obligations",
+        f"  // B1: the buyer must pay the price for goods delivered {p.point_phrase} and evidenced",
+        f"  // by {evidence}; this survives termination of the contract.",
+        f"  oPay: (Happens({p.delivery_var}) and Happens({p.pay_second_conjunct})) -> Obligation(buyer, seller, true,",
+        "              WhappensBefore(paid, paid.payDueDate) and paid.amount == price);",
+    ]
+
+
+def emit_powers(c: RuleConfig) -> list[str]:
+    p = c.profile
+    L = ["Powers"]
+    if p.has_nomination:
+        L += [
+            f"  // If the buyer fails to nominate the {p.transport_noun} in time, the seller may suspend delivery.",
+            f"  pSuspendDelivery: Happens(Violated(obligations.{p.nominate_obl})) ->",
+            "              P(seller, buyer, true, Suspended(obligations.oDeliver)) with Controller seller;",
+            "  // A late nomination during the suspension resumes the delivery obligation.",
+            f"  pResumeDelivery: HappensWithin({p.nomination_var}, Suspension(obligations.oDeliver)) ->",
+            "              P(buyer, seller, true, Resumed(obligations.oDeliver));",
+        ]
+    if p.has_seller_carriage:
+        L += [
+            "  // If the seller fails to contract carriage to the destination, the buyer may terminate.",
+            "  pTerminateNoCarriage: Happens(Violated(obligations.oContractCarriage)) -> P(buyer, seller, true, Terminated(self));",
+        ]
+    if p.has_insurance:
+        L += [
+            "  // If the seller fails to insure the cargo, the buyer may terminate.",
+            "  pTerminateNoInsurance: Happens(Violated(obligations.oInsure)) -> P(buyer, seller, true, Terminated(self));",
+        ]
+    if p.has_import_clearance:
+        L += [
+            "  // If the seller fails to clear the goods for import, the buyer may terminate.",
+            "  pTerminateNoImportClearance: Happens(Violated(obligations.oImportClearance)) -> P(buyer, seller, true, Terminated(self));",
+        ]
+    L += [
+        f"  // If the seller fails to deliver {p.point_phrase}, the buyer may terminate the contract.",
+        "  pTerminateByBuyer: Happens(Violated(obligations.oDeliver)) -> P(buyer, seller, true, Terminated(self));",
+        "  // If the buyer fails to take delivery, the seller may terminate the contract.",
+        "  pTerminateBySeller: Happens(Violated(obligations.oTakeDelivery)) -> P(seller, buyer, true, Terminated(self));",
+    ]
+    return L
+
+
+def emit_acpolicy(c: RuleConfig) -> list[str]:
+    p = c.profile
+    rules = [
+        "read To buyer On goods.description by seller",
+        "read To buyer On obligations.oDeliver by seller",
+    ]
+    if p.has_seller_carriage:
+        rules.append("read To buyer On carriageContracted by seller")
+    if p.has_insurance:
+        rules.append("read To buyer On insuranceObtained by seller")
+    if p.has_import_clearance:
+        rules.append("read To buyer On importCleared by seller")
+    if p.has_carrier:
+        if not p.has_seller_carriage:  # F-term with a carrier (FOB): carrier reads delivery
+            rules.append(f"read To carrier On {p.delivery_var} by seller")
+        rules += [
+            "read To seller On billOfLadingIssued by carrier",
+            "write To carrier On billOfLading.blNumber by seller",
+        ]
+    else:  # proof-only rules: buyer reads the delivery event
+        rules.append(f"read To buyer On {p.delivery_var} by seller")
+    rules.append("write To buyer On powers.pTerminateByBuyer by seller")
+
+    L = ["ACPolicy with Controller seller"]
+    L += [f"  Rule{i}: Grant {r};" for i, r in enumerate(rules, 1)]
+    return L
+
+
+def emit_constraints(c: RuleConfig) -> list[str]:
+    return ["Constraints", "  not(IsEqual(buyer, seller));"]
+
+
+def assemble(c: RuleConfig) -> str:
+    """Join sections in the grammar's required order, blank-line separated."""
+    c.profile = profile_for(c)
+    sections = [
+        emit_domain(c),
+        emit_contract_header(c),
+        emit_declarations(c),
+        emit_preconditions(c),
+        emit_obligations(c),
+        emit_surviving(c),
+        emit_powers(c),
+        emit_acpolicy(c),
+        emit_constraints(c),
+    ]
+    body = (NL + NL).join(NL.join(s) for s in sections)
+    return body + NL + NL + "endContract" + NL
+
+
+# --- CLI ---------------------------------------------------------------------
+
+
+def write_spec(path: Path, text: str) -> None:
+    # Force LF regardless of platform (see .gitattributes).
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--only", help="comma-separated rule codes (default: all implemented)")
+    ap.add_argument("--out", default=str(REPO / "specs"), help="output dir (default: specs/)")
+    ap.add_argument("--stdout", metavar="CODE", help="print one spec to stdout, write nothing")
+    ap.add_argument("--check", action="store_true", help="diff against committed specs, don't write")
+    args = ap.parse_args(argv)
+
+    rules = load_rules()
+
+    if args.stdout:
+        code = args.stdout.upper()
+        if code not in rules:
+            return _err(f"unknown rule {code}")
+        sys.stdout.write(assemble(rules[code]))
+        return 0
+
+    codes = [c.upper() for c in args.only.split(",")] if args.only else IMPLEMENTED
+    out_dir = Path(args.out)
+    rc = 0
+    for code in codes:
+        if code not in rules:
+            rc = _err(f"unknown rule {code}") or rc
+            continue
+        text = assemble(rules[code])
+        target = out_dir / f"{code}.symboleo"
+        if args.check:
+            existing = target.read_text(encoding="utf-8").replace("\r\n", "\n") if target.exists() else None
+            if existing != text:
+                print(f"DRIFT  {code}: generated output differs from {target}")
+                rc = 1
+            else:
+                print(f"OK     {code}: matches {target}")
+        else:
+            write_spec(target, text)
+            print(f"wrote  {target}")
+    return rc
+
+
+def _err(msg: str) -> int:
+    print(f"error: {msg}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

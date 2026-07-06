@@ -1,0 +1,14 @@
+# Consistent line endings across platforms.
+* text=auto
+
+# Shell scripts must stay LF or Linux CI can't exec them (bad interpreter).
+*.sh    text eol=lf
+
+# SymboleoAC specs are compiled on Linux CI; keep them LF too.
+*.symboleo text eol=lf
+
+# PowerShell is Windows-side; CRLF is fine.
+*.ps1   text eol=crlf
+
+# Binaries
+*.jar   binary

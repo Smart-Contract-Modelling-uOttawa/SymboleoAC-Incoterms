@@ -11,6 +11,11 @@ Domain exwDomain
   GoodsMadeAvailable isAn Event with place: String, Env availableDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // The goods are clearly identified (appropriated) as the contract goods -
+  // the ICC proviso guarding every premature risk/cost transfer (B3/B9).
+  GoodsIdentified isAn Event with performer: Seller, controller: Seller;
+  // B9(d): the buyer bears the additional costs caused by its (or its nominee's) failure.
+  AdditionalCostsPaid isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
   // Buyer pays the price.
   Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
 endDomain
@@ -27,6 +32,8 @@ Declarations
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   goodsMadeAvailable: GoodsMadeAvailable with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  goodsIdentified: GoodsIdentified with performer := seller, controller := seller;
+  additionalCostsPaid: AdditionalCostsPaid with performer := buyer, controller := buyer;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
 
 Preconditions
@@ -40,6 +47,12 @@ Obligations
               and goodsMadeAvailable.place == placeOfDelivery);
   // B2: the buyer takes delivery of the goods once they are at the seller's premises.
   oTakeDelivery: Happens(goodsMadeAvailable) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  // B3/B9(d): if the buyer fails to take delivery of the goods at its disposal,
+  // the buyer bears the resulting additional costs - the rules' premature
+  // risk/cost transfer, guarded by the ICC proviso that the goods have been
+  // clearly identified as the contract goods.
+  oFailureCosts: Happens(Violated(obligations.oTakeDelivery)) ->
+              O(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered at the seller's premises and evidenced

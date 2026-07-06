@@ -9,6 +9,9 @@ Domain fcaDomain
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
   // Buyer nominates the carrier and gives notice (name, place, deadline).
   CarrierNominated isAn Event with Env carrierName: String, Env namedPlace: String, dueDate: Date, performer: Buyer, controller: Buyer;
+  // B3(a): the carrier nominated by the buyer fails to take the goods into
+  // its charge; the buyer answers for its nominee.
+  CarrierFailedToTakeCharge isAn Event with Env reason: String, performer: Buyer, controller: Buyer;
   // Seller clears the goods for export.
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Delivery: seller hands the goods to the buyer's carrier at the named place (risk passes).
@@ -20,6 +23,11 @@ Domain fcaDomain
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // The goods are clearly identified (appropriated) as the contract goods -
+  // the ICC proviso guarding every premature risk/cost transfer (B3/B9).
+  GoodsIdentified isAn Event with performer: Seller, controller: Seller;
+  // B9(d): the buyer bears the additional costs caused by its (or its nominee's) failure.
+  AdditionalCostsPaid isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
   // Buyer pays the price.
   Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
 endDomain
@@ -35,11 +43,14 @@ Declarations
   buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   carrierNominated: CarrierNominated with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
+  carrierFailedToTakeCharge: CarrierFailedToTakeCharge with performer := buyer, controller := buyer;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   handedToCarrier: HandedToCarrier with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  goodsIdentified: GoodsIdentified with performer := seller, controller := seller;
+  additionalCostsPaid: AdditionalCostsPaid with performer := buyer, controller := buyer;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
 
 Preconditions
@@ -64,6 +75,12 @@ Obligations
   oNominateCarrier: O(buyer, seller, true, WhappensBefore(carrierNominated, carrierNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are with the carrier.
   oTakeDelivery: (Happens(handedToCarrier) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  // B3/B9(d): if the buyer fails to nominate the carrier in time or its nominee fails to take the goods,
+  // the buyer bears the resulting additional costs - the rules' premature
+  // risk/cost transfer, guarded by the ICC proviso that the goods have been
+  // clearly identified as the contract goods.
+  oFailureCosts: (Happens(Violated(obligations.oNominateCarrier)) or Happens(carrierFailedToTakeCharge)) ->
+              O(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered to the carrier and evidenced
@@ -72,8 +89,9 @@ Surviving Obligations
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
 
 Powers
-  // If the buyer fails to nominate the carrier in time, the seller may suspend delivery.
-  pSuspendDelivery: Happens(Violated(obligations.oNominateCarrier)) ->
+  // If the buyer fails to nominate the carrier in time - or its nominee
+  // fails to take the goods - the seller may suspend delivery.
+  pSuspendDelivery: (Happens(Violated(obligations.oNominateCarrier)) or Happens(carrierFailedToTakeCharge)) ->
               P(seller, buyer, true, Suspended(obligations.oDeliver)) with Controller seller;
   // A late nomination during the suspension resumes the delivery obligation.
   pResumeDelivery: HappensWithin(carrierNominated, Suspension(obligations.oDeliver)) ->

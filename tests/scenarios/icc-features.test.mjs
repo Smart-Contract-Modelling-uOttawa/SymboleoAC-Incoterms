@@ -135,6 +135,35 @@ for (const R of RULES) {
   });
 }
 
+// --- B10 schedule notice: the compliant path (agree -> notify in time) --------
+for (const code of ['CPT', 'DDP', 'EXW']) {
+  test(`${code}: B10 schedule notice fulfilled (agree -> notify)`, () => {
+    const R = byCode[code];
+    const rule = loadRule(genDir, code);
+    const c = makeContract(rule, R.ctor(effNow()));
+    fire(rule, c, 'scheduleRightAgreed');
+    assert.ok(c.obligations.oNotifySchedule != null, `${code}: oNotifySchedule not created`);
+    fire(rule, c, 'scheduleNotified', { chosenPoint: 'Gate 4', securityRequirements: 'ISPS' });
+    assert.ok(c.obligations.oNotifySchedule.isFulfilled(),
+      `${code}: oNotifySchedule = ${c.obligations.oNotifySchedule.state}`);
+  });
+}
+
+// --- goods identified only AFTER the failure (late antecedent activation) -----
+for (const code of ['FOB', 'FAS']) {
+  test(`${code}: oFailureCosts antecedent activates when goods are identified late`, () => {
+    const R = byCode[code];
+    const rule = loadRule(genDir, code);
+    const c = makeContract(rule, R.ctor(effNow()));
+    fire(rule, c, 'vesselFailedToLoad', { reason: 'failed to arrive' }); // no violation: contract stays alive
+    const o = c.survivingObligations.oFailureCosts;
+    assert.ok(o != null, `${code}: oFailureCosts not created`);
+    fire(rule, c, 'goodsIdentified');          // the proviso is satisfied afterwards
+    fire(rule, c, 'additionalCostsPaid', { amount: 99 });
+    assert.ok(o.isFulfilled(), `${code}: oFailureCosts = ${o.state}`);
+  });
+}
+
 // --- CIP/CIF additional War/Strikes cover (A5/B5/B9) --------------------------
 for (const code of ['CIF', 'CIP']) {
   test(`${code}: additional cover (request -> info -> obtain -> pay)`, () => {

@@ -9,11 +9,13 @@ events/assets/norms that its Incoterms rule actually uses (faithful per-rule
 modelling). The varying tokens live in a per-rule ``Profile``.
 
 Two orthogonal axes drive the templates:
-  * term_type — **F** (buyer contracts carriage + nominates the vessel/carrier;
-    oNominateX + suspend/resume powers) vs **C** (seller contracts carriage to
-    destination; oContractCarriage + pTerminateNoCarriage; risk still passes at
-    the origin delivery point while cost runs to destination). CIF/CIP add a
-    seller insurance obligation (cover level is data only).
+  * term_type — **E** (EXW: goods made available at the seller's premises,
+    minimum seller obligation), **F** (buyer contracts carriage + nominates the
+    vessel/carrier; oNominateX + suspend/resume powers), **C** (seller contracts
+    carriage to destination; oContractCarriage + pTerminateNoCarriage; risk
+    still passes at the origin delivery point while cost runs to destination),
+    or **D** (delivery at destination; risk and cost pass together there).
+    CIF/CIP add a seller insurance obligation (cover level is data only).
   * family — **sea** (vessel / port / on-board or alongside / bill of lading) vs
     **any_mode** (carrier / place / handover to the (first) carrier).
 
@@ -651,7 +653,7 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         ]
     if p.has_nomination:
         L += [
-            f"  // B7/B10: the buyer nominates the {p.transport_noun} and gives sufficient notice in time.",
+            f"  // B4/B10: the buyer nominates the {p.transport_noun} and gives sufficient notice in time.",
             f"  {p.nominate_obl}: O(buyer, seller, true, WhappensBefore({p.nomination_var}, {p.nomination_var}.dueDate));",
         ]
     L += [

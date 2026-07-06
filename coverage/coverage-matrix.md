@@ -1,7 +1,13 @@
 # Coverage matrix — Incoterms 2020 articles × SymboleoAC
 
-Legend: **✅** expressible · **◐** partial / approximated · **❌** not natively
-expressible · **—** not applicable for this rule.
+Legend: **✅** modelled · **◐** partially modelled / approximated · **⬜**
+expressible in SymboleoAC but not (yet) modelled · **❌** not natively
+expressible (language limit) · **—** the ICC text imposes no obligation for
+this rule.
+
+The ⬜/❌ split separates *modelling choices* from *language limits* — a cell is
+❌ only when SymboleoAC lacks the concept (see `icc-gap-analysis.md` for the
+audit against the full ICC text that motivated this distinction).
 
 Columns are the 11 rules. **All 11 columns are filled** — every `specs/*.symboleo`
 is generated and compiles 0 errors / 0 warnings. The single shared "Device" column
@@ -15,31 +21,44 @@ FAS/any-mode proof-of-delivery vs a bill of lading), see the cross-cutting notes
 | A1 | General obligations (goods + invoice conform) | precondition / asset attributes | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | A2 | Delivery (delivery point) | `oDeliver` obligation; delivery event | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | A3 | Transfer of risks | **no first-class risk**; via delivery trigger + surviving pay | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| A4 | Carriage | carriage event / obligation (seller side for C/D rules) | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | ✅ | ✅ |
-| A5 | Insurance | seller insurance obligation (CIF/CIP); level = attribute only | — | — | — | ◐ | — | — | — | — | — | — | ◐ |
+| A4 | Carriage | carriage event / obligation (seller side for C/D rules); E/F rules still owe request-triggered transport info + security compliance | ⬜ | ⬜ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ | ✅ | ✅ |
+| A5 | Insurance | seller insurance obligation (CIF/CIP); level = attribute only; non-CIF/CIP sea+E/F/C rules owe request-triggered insurance info | ⬜ | ⬜ | ⬜ | ◐ | — | — | — | ⬜ | ⬜ | ⬜ | ◐ |
 | A6 | Delivery / transport document | `BillOfLading` asset + issuance event + `oProvideDocuments` | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| A7 | Export/import clearance | `oExportClearance` obligation | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| A8 | Checking / packaging / marking | asset attributes / constraints | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| A7 | Export/import clearance | `oExportClearance` obligation; EXW seller owes clearance *assistance* only | ⬜ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| A8 | Checking / packaging / marking | **not yet modelled** — expressible as a packaging/marking obligation ordered before delivery | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | A9 | Allocation of costs | **no cost algebra**; per-stage data / payment obligations | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| A10 | Notices | temporal predicates; "sufficient" lost | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| A10 | Notices | **not yet modelled** — expressible as notice events + obligations (FCA/FAS/FOB even owe a *dual* delivered-or-failed notice) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 
 ## Buyer obligations (B1–B10)
 
 | Art. | Obligation | Device in SymboleoAC | EXW | FCA | CPT | CIP | DAP | DPU | DDP | FAS | FOB | CFR | CIF |
 |------|-----------|----------------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| B1 | General obligations (pay the price) | `oPay` (surviving) obligation | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| B2 | Taking delivery | `oTakeDelivery` obligation | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| B1 | General obligations (pay the price) | `oPay` (surviving) obligation — *presence* ✅; price/timing content comes from the sale contract, and the trigger is conditional on delivery+documents (see notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| B2 | Taking delivery | `oTakeDelivery` obligation (C-rules' second duty — *receive from the carrier at destination* — not separately modelled) | ✅ | ✅ | ◐ | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
 | B3 | Transfer of risks | see A3; buyer bears risk after delivery point | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | B4 | Carriage | buyer contracts carriage (F-rules) via nomination | ◐ | ✅ | — | — | — | — | — | ✅ | ✅ | — | — |
-| B5 | Insurance | buyer insurance (or none) | — | — | — | — | — | — | — | — | — | — | — |
-| B6 | Proof of delivery | accept documents; event | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| B7 | Export/import clearance | buyer import clearance obligation | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | — | ◐ | ◐ | ◐ | ◐ |
-| B8 | Inspection of goods | inspection event / obligation | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| B9 | Allocation of costs | see A9 | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| B10 | Notices | vessel nomination + notice (`oNominateVessel`) | ◐ | ✅ | ◐ | ◐ | ◐ | ◐ | ◐ | ✅ | ✅ | ◐ | ◐ |
+| B5 | Insurance | no buyer insurance *obligation*; but CIP/CIF owe additional-cover info, and DAP/DPU/DDP owe insurance info at seller's request | — | — | — | ⬜ | ⬜ | ⬜ | ⬜ | — | — | — | ⬜ |
+| B6 | Proof of delivery | document events exist; buyer *acceptance/rejection* (and EXW's buyer-provided evidence) unmodelled | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| B7 | Export/import clearance | **not yet modelled** — no spec makes the buyer debtor of a clearance norm (incl. EXW's buyer *export* clearance and DDP's buyer assistance) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| B8 | Checking / packaging / marking | Incoterms 2020 B8 imposes **no buyer obligation** in any rule ("Inspection" was the 2010 numbering) | — | — | — | — | — | — | — | — | — | — | — |
+| B9 | Allocation of costs | see A9; the B9(d) *failure-cost* heads are consequence norms, not cost algebra | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| B10 | Notices | vessel/carrier nomination event models the notice; notified *content* (buyer-selected date, security requirements, FCA's mode/point) partial | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 
 ## Cross-cutting findings (running list)
 
+- **2026-07-05 audit against the full ICC publication** (`icc-gap-analysis.md`):
+  the matrix was corrected — B8 had used the Incoterms *2010* numbering
+  ("Inspection of goods"); B7/A8/A10 cells cited devices absent from the specs
+  (now ⬜); several "—" cells contradicted the official text (EXW A7, DDP B7,
+  B5 for CIP/CIF/DAP/DPU/DDP, A4/A5 information duties) — the ICC's
+  request-triggered *assistance at the requester's risk and cost* pattern
+  appears in A4/A5/A6/A7(b)/B5/B7(a) across the corpus. B1's ✅ is for the
+  obligation's *presence*: the ICC rules deliberately exclude payment
+  time/place/method/currency (they come from the sale contract), and `oPay`
+  triggers only on delivery+documents — a buyer whose own failure prevents
+  delivery escapes `oPay`, whereas the official B3/B9 provisos make it bear
+  risk and additional costs from the agreed date (see the failure-proviso
+  finding below).
 - **Risk (A3/B3)** is the central limitation — SymboleoAC has no risk primitive.
   Modelled structurally (delivery triggers payment; payment survives). Candidate
   language extension for the Discussion section.

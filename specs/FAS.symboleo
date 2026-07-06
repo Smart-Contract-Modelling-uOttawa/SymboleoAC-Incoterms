@@ -53,7 +53,7 @@ Obligations
   // proof that the goods were delivered alongside the vessel.
   oProvideDocuments: Happens(deliveredAlongside) -> O(seller, buyer, true,
               Happens(documentsProvided));
-  // B7/B10: the buyer nominates the vessel and gives sufficient notice in time.
+  // B4/B10: the buyer nominates the vessel and gives sufficient notice in time.
   oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are alongside.
   oTakeDelivery: Happens(deliveredAlongside) -> O(buyer, seller, true, Happens(goodsTakenOver));

@@ -53,7 +53,7 @@ Obligations
   // with the usual proof that the goods were delivered.
   oProvideDocuments: Happens(handedToCarrier) -> O(seller, buyer, true,
               Happens(documentsProvided));
-  // B7/B10: the buyer nominates the carrier and gives sufficient notice in time.
+  // B4/B10: the buyer nominates the carrier and gives sufficient notice in time.
   oNominateCarrier: O(buyer, seller, true, WhappensBefore(carrierNominated, carrierNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are with the carrier.
   oTakeDelivery: Happens(handedToCarrier) -> O(buyer, seller, true, Happens(goodsTakenOver));

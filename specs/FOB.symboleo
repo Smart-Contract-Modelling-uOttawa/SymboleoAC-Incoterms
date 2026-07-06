@@ -62,7 +62,7 @@ Obligations
   // provides the buyer with that proof of delivery.
   oProvideDocuments: Happens(loadedOnBoard) -> O(seller, buyer, true,
               Happens(billOfLadingIssued) and Happens(documentsProvided));
-  // B7/B10: the buyer nominates the vessel and gives sufficient notice in time.
+  // B4/B10: the buyer nominates the vessel and gives sufficient notice in time.
   oNominateVessel: O(buyer, seller, true, WhappensBefore(vesselNominated, vesselNominated.dueDate));
   // B2: the buyer takes delivery of the goods once they are on board.
   oTakeDelivery: Happens(loadedOnBoard) -> O(buyer, seller, true, Happens(goodsTakenOver));

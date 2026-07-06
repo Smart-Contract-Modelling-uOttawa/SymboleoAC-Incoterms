@@ -93,6 +93,40 @@ export function violate(rule, contract, oblName) {
   return contract;
 }
 
+// Force an obligation into Suspension and emit the obligation-Suspended event,
+// standing in for a party *exercising* a suspend power (on Fabric, a
+// transaction). Lets tests drive the suspend -> late-event -> resume cycle.
+export function suspend(rule, contract, oblName) {
+  const obl = contract.obligations[oblName];
+  if (obl == null) throw new Error(`${rule.code}: no obligation '${oblName}'`);
+  reinit(rule, contract);
+  obl.suspended();
+  const { Events, InternalEvent, InternalEventSource, InternalEventType } = rule.core;
+  Events.emitEvent(
+    contract,
+    new InternalEvent(InternalEventSource.obligation, InternalEventType.obligation.Suspended, obl),
+  );
+  return contract;
+}
+
+// Re-dispatch the Happened notification for an event that already happened,
+// standing in for the per-transaction re-evaluation the generated Fabric
+// wrapper performs (it reconstructs the contract and re-runs the listeners on
+// every transaction). Needed when a listener's condition (e.g. HappensWithin a
+// Suspension) becomes true only *after* the event's first dispatch.
+export function reemit(rule, contract, eventVar) {
+  const ev = contract[eventVar];
+  if (ev == null) throw new Error(`${rule.code}: no event '${eventVar}'`);
+  if (!ev.hasHappened()) throw new Error(`${rule.code}: event '${eventVar}' has not happened`);
+  reinit(rule, contract);
+  const { Events, InternalEvent, InternalEventSource, InternalEventType } = rule.core;
+  Events.emitEvent(
+    contract,
+    new InternalEvent(InternalEventSource.contractEvent, InternalEventType.contractEvent.Happened, ev),
+  );
+  return contract;
+}
+
 // A future/past ISO date `days` from a base (default: now), for deadlines.
 export function isoOffsetDays(days, base = new Date()) {
   const d = new Date(base.getTime() + days * 86400000);

@@ -13,10 +13,23 @@ Domain cptDomain
   CarriageContracted isAn Event with destinationPlace: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
   // Delivery: seller hands the goods to the first carrier it contracted (risk passes on handover).
   HandedToFirstCarrier isAn Event with place: String, Env handoverDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // A2 alternative performance: the seller may instead procure goods already
+  // so delivered (string sales, common in commodity chains).
+  ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller tenders the buyer the usual transport document for the carriage.
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
+  // buyer's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToBuyerRequested isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToBuyerProvided isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToBuyerReimbursed isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, buyer -> seller (ICC pattern: 'at the
+  // seller's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToSellerRequested isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToSellerProvided isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToSellerReimbursed isAn Event with Env amount: Number, performer: Seller, controller: Seller;
   // Buyer pays the price.
   Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
 endDomain
@@ -34,8 +47,15 @@ Declarations
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
   handedToFirstCarrier: HandedToFirstCarrier with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
+  assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
+  assistanceToBuyerReimbursed: AssistanceToBuyerReimbursed with performer := buyer, controller := buyer;
+  assistanceToSellerRequested: AssistanceToSellerRequested with performer := seller, controller := seller;
+  assistanceToSellerProvided: AssistanceToSellerProvided with performer := buyer, controller := buyer;
+  assistanceToSellerReimbursed: AssistanceToSellerReimbursed with performer := seller, controller := seller;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
 
 Preconditions
@@ -43,27 +63,45 @@ Preconditions
 
 Obligations
   // A7: the seller clears the goods for export before they are handed to the carrier.
-  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, handedToFirstCarrier));
+  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, handedToFirstCarrier)
+              or ShappensBefore(exportCleared, procuredSoDelivered));
   // A4: the seller contracts carriage to the named destination, at its own cost, in time.
   oContractCarriage: O(seller, buyer, true,
               WhappensBefore(carriageContracted, carriageContracted.dueDate)
               and carriageContracted.destinationPlace == placeOfDestination);
   // A2 delivery: the seller hands the goods to the first carrier at the named
   // place of delivery before the deadline; risk passes to the buyer on handover.
+  // Alternatively the seller procures goods already so delivered (string sales).
   oDeliver: O(seller, buyer, true,
-              WhappensBefore(handedToFirstCarrier, handedToFirstCarrier.delDueDate)
-              and handedToFirstCarrier.place == placeOfDelivery);
+              (WhappensBefore(handedToFirstCarrier, handedToFirstCarrier.delDueDate)
+              and handedToFirstCarrier.place == placeOfDelivery)
+              or WhappensBefore(procuredSoDelivered, handedToFirstCarrier.delDueDate));
   // A6: the seller provides the buyer with the usual transport document for the
   // carriage it has contracted to the destination.
-  oProvideDocuments: Happens(handedToFirstCarrier) -> O(seller, buyer, true,
+  oProvideDocuments: (Happens(handedToFirstCarrier) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(documentsProvided));
   // B2: the buyer takes delivery of the goods once they are with the carrier.
-  oTakeDelivery: Happens(handedToFirstCarrier) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  oTakeDelivery: (Happens(handedToFirstCarrier) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  // At the buyer's request, risk and cost, the seller provides assistance with:
+  //   - A5: insurance information
+  //   - A7(b): transit/import clearance documents and information
+  oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
+              Happens(assistanceToBuyerProvided));
+  // B9: the buyer reimburses all costs of assistance it requested.
+  oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,
+              Happens(assistanceToBuyerReimbursed));
+  // At the seller's request, risk and cost, the buyer provides assistance with:
+  //   - B7(a): export clearance documents and information
+  oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
+              Happens(assistanceToSellerProvided));
+  // A9: the seller reimburses all costs of assistance it requested.
+  oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,
+              Happens(assistanceToSellerReimbursed));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered to the carrier and evidenced
   // by the usual proof of delivery; this survives termination of the contract.
-  oPay: (Happens(handedToFirstCarrier) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
+  oPay: ((Happens(handedToFirstCarrier) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
 
 Powers

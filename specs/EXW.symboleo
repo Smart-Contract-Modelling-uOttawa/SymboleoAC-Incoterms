@@ -11,6 +11,16 @@ Domain exwDomain
   GoodsMadeAvailable isAn Event with place: String, Env availableDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
+  // buyer's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToBuyerRequested isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToBuyerProvided isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToBuyerReimbursed isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
+  // The goods are clearly identified (appropriated) as the contract goods -
+  // the ICC proviso guarding every premature risk/cost transfer (B3/B9).
+  GoodsIdentified isAn Event with performer: Seller, controller: Seller;
+  // B9(d): the buyer bears the additional costs caused by its (or its nominee's) failure.
+  AdditionalCostsPaid isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
   // Buyer pays the price.
   Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
 endDomain
@@ -27,6 +37,11 @@ Declarations
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   goodsMadeAvailable: GoodsMadeAvailable with place := placeOfDelivery, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
+  assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
+  assistanceToBuyerReimbursed: AssistanceToBuyerReimbursed with performer := buyer, controller := buyer;
+  goodsIdentified: GoodsIdentified with performer := seller, controller := seller;
+  additionalCostsPaid: AdditionalCostsPaid with performer := buyer, controller := buyer;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
 
 Preconditions
@@ -40,12 +55,29 @@ Obligations
               and goodsMadeAvailable.place == placeOfDelivery);
   // B2: the buyer takes delivery of the goods once they are at the seller's premises.
   oTakeDelivery: Happens(goodsMadeAvailable) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  // At the buyer's request, risk and cost, the seller provides assistance with:
+  //   - A4: transport information incl. security requirements
+  //   - A5: insurance information
+  //   - A7: export/transit/import clearance documents and information (EXW: all clearance is the buyer's)
+  oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
+              Happens(assistanceToBuyerProvided));
+  // B9: the buyer reimburses all costs of assistance it requested.
+  oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,
+              Happens(assistanceToBuyerReimbursed));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered at the seller's premises and evidenced
   // by their collection; this survives termination of the contract.
   oPay: (Happens(goodsMadeAvailable) and Happens(goodsTakenOver)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+  // B3/B9(d): if the buyer fails to take delivery of the goods at its disposal,
+  // the buyer bears the resulting additional costs - the rules' premature
+  // risk/cost transfer, guarded by the ICC proviso that the goods have been
+  // clearly identified as the contract goods. A surviving obligation: like
+  // the payment above, it outlives termination caused by the very failure
+  // that triggered it.
+  oFailureCosts: Happens(Violated(obligations.oTakeDelivery)) ->
+              Obligation(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Powers
   // If the seller fails to deliver at the seller's premises, the buyer may terminate the contract.

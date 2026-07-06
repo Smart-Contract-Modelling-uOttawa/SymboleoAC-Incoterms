@@ -15,7 +15,7 @@ const GOODS = ['Widgets', 100, 5000, 'USD']; // goodsDesc, qty, price, curr
 const ORIGIN = 'OriginPlace';
 const DEST = 'DestPlace';
 // Deadlines (days from effDate). Events fire "now" (== effDate), before all.
-const NOTICE = 10; const CARRIAGE = 10; const DELIV = 20; const PAY = 30;
+const NOTICE = 10; const CARRIAGE = 10; const IMPORT = 15; const DELIV = 20; const PAY = 30;
 
 const ev = (event, attrs) => ({ event, attrs });
 
@@ -41,7 +41,7 @@ export const RULES = [
   },
   {
     code: 'FCA', nominates: 'oNominateCarrier',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, DELIV, PAY],
     happy: [ev('carrierNominated', { namedPlace: ORIGIN }), ev('exportCleared'),
       ev('handedToCarrier', { place: ORIGIN }), ...proofDocs],
     breach: { pre: [ev('carrierNominated', { namedPlace: ORIGIN }), ev('exportCleared')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
@@ -74,14 +74,14 @@ export const RULES = [
   // --- D-terms: seller carriage + delivery at destination ---
   {
     code: 'DAP',
-    ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, DELIV, PAY],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('madeAvailable'), ...proofDocs],
+    ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, IMPORT, DELIV, PAY],
+    happy: [ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('madeAvailable'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'DPU',
-    ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, DELIV, PAY],
-    happy: [ev('exportCleared'), ev('carriageContracted'), ev('unloadedAtDestination'), ...proofDocs],
+    ctor: (eff) => [S, B, ...GOODS, DEST, eff, CARRIAGE, IMPORT, DELIV, PAY],
+    happy: [ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('unloadedAtDestination'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {

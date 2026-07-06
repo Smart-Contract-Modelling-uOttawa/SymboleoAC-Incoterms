@@ -8,8 +8,8 @@ dist/
 out/
 generated/
 
-# Coverage output (c8 / nyc)
-coverage/
+# Coverage output (c8 / nyc) — scoped so the project's coverage/ docs dir stays tracked
+tests/scenarios/coverage/
 .nyc_output/
 
 # LaTeX build artifacts

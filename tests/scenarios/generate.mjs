@@ -27,7 +27,19 @@ export const ALL_CODES = ['EXW', 'FCA', 'FAS', 'FOB', 'CPT', 'CFR', 'CIP', 'CIF'
 // We rewrite it to `true`, which is the intended behaviour for a freshly
 // created surviving obligation. Remove this once the generator is fixed.
 export function patchCodegen(js) {
-  return js.split('!isNewInstance &&true').join('true');
+  // Exact shape emitted for antecedent-`true` surviving obligations (oPay).
+  js = js.split('!isNewInstance &&true').join('true');
+  // General shape: any other use of the undeclared identifier inside a
+  // createSurvivingObligation_* body (e.g. oFailureCosts, whose antecedent is
+  // the goods-identified proviso) — declare it at the top of the function.
+  // The legitimate inner `const isNewInstance = ...` shadows this harmlessly.
+  js = js.replace(
+    /createSurvivingObligation_(\w+)\(contract\) \{\n/g,
+    (m, name) =>
+      `createSurvivingObligation_${name}(contract) {\n` +
+      `    const isNewInstance = contract.survivingObligations.${name} != null && contract.survivingObligations.${name}.isFinished();\n`,
+  );
+  return js;
 }
 
 async function generateFiles(source) {

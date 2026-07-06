@@ -11,12 +11,33 @@ Domain dpuDomain
   ExportCleared isAn Event with performer: Seller, controller: Seller;
   // Seller contracts carriage to the named destination (and pays the freight).
   CarriageContracted isAn Event with destinationPlace: String, Env carrierName: String, dueDate: Date, performer: Seller, controller: Seller;
+  // B7: the buyer carries out and pays for import (and transit) clearance
+  // formalities - licences, security clearance, duties - in time for delivery.
+  ImportClearedByBuyer isAn Event with dueDate: Date, performer: Buyer, controller: Buyer;
   // Delivery: seller unloads the goods and makes them available at the destination (risk passes).
   UnloadedAtDestination isAn Event with place: String, Env unloadDate: Date, delDueDate: Date, performer: Seller, controller: Seller;
+  // A2 alternative performance: the seller may instead procure goods already
+  // so delivered (string sales, common in commodity chains).
+  ProcuredSoDelivered isAn Event with performer: Seller, controller: Seller;
   // Seller gives the buyer the document/notice letting it take delivery at destination.
   DocumentsProvided isAn Event with performer: Seller, controller: Seller;
   // Buyer takes delivery of the goods.
   GoodsTakenOver isAn Event with performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, seller -> buyer (ICC pattern: 'at the
+  // buyer's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToBuyerRequested isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToBuyerProvided isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToBuyerReimbursed isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
+  // Request-triggered assistance channel, buyer -> seller (ICC pattern: 'at the
+  // seller's request, risk and cost'; per-article topics at the obligation).
+  AssistanceToSellerRequested isAn Event with Env topic: String, performer: Seller, controller: Seller;
+  AssistanceToSellerProvided isAn Event with Env topic: String, performer: Buyer, controller: Buyer;
+  AssistanceToSellerReimbursed isAn Event with Env amount: Number, performer: Seller, controller: Seller;
+  // The goods are clearly identified (appropriated) as the contract goods -
+  // the ICC proviso guarding every premature risk/cost transfer (B3/B9).
+  GoodsIdentified isAn Event with performer: Seller, controller: Seller;
+  // B9(d): the buyer bears the additional costs caused by its (or its nominee's) failure.
+  AdditionalCostsPaid isAn Event with Env amount: Number, performer: Buyer, controller: Buyer;
   // Buyer pays the price.
   Paid isAn Event with amount: Number, currency: Currency, from: Buyer, to: Seller, payDueDate: Date, performer: Buyer, controller: Buyer;
 endDomain
@@ -24,7 +45,7 @@ endDomain
 Contract DPU (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDestination: String, effDate: Date, carriageDays: Number, deliveryDays: Number, paymentDays: Number
+  placeOfDestination: String, effDate: Date, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
 )
 
 Declarations
@@ -33,9 +54,19 @@ Declarations
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
   exportCleared: ExportCleared with performer := seller, controller := seller;
   carriageContracted: CarriageContracted with destinationPlace := placeOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
+  importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
   unloadedAtDestination: UnloadedAtDestination with place := placeOfDestination, delDueDate := Date.add(effDate, deliveryDays, days), performer := seller, controller := seller;
+  procuredSoDelivered: ProcuredSoDelivered with performer := seller, controller := seller;
   documentsProvided: DocumentsProvided with performer := seller, controller := seller;
   goodsTakenOver: GoodsTakenOver with performer := buyer, controller := buyer;
+  assistanceToBuyerRequested: AssistanceToBuyerRequested with performer := buyer, controller := buyer;
+  assistanceToBuyerProvided: AssistanceToBuyerProvided with performer := seller, controller := seller;
+  assistanceToBuyerReimbursed: AssistanceToBuyerReimbursed with performer := buyer, controller := buyer;
+  assistanceToSellerRequested: AssistanceToSellerRequested with performer := seller, controller := seller;
+  assistanceToSellerProvided: AssistanceToSellerProvided with performer := buyer, controller := buyer;
+  assistanceToSellerReimbursed: AssistanceToSellerReimbursed with performer := seller, controller := seller;
+  goodsIdentified: GoodsIdentified with performer := seller, controller := seller;
+  additionalCostsPaid: AdditionalCostsPaid with performer := buyer, controller := buyer;
   paid: Paid with amount := price, currency := curr, from := buyer, to := seller, payDueDate := Date.add(effDate, paymentDays, days), performer := buyer, controller := buyer;
 
 Preconditions
@@ -43,28 +74,57 @@ Preconditions
 
 Obligations
   // A7: the seller clears the goods for export before they are dispatched.
-  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, unloadedAtDestination));
+  oExportClearance: O(seller, buyer, true, ShappensBefore(exportCleared, unloadedAtDestination)
+              or ShappensBefore(exportCleared, procuredSoDelivered));
   // A4: the seller contracts carriage to the named destination, at its own cost, in time.
   oContractCarriage: O(seller, buyer, true,
               WhappensBefore(carriageContracted, carriageContracted.dueDate)
               and carriageContracted.destinationPlace == placeOfDestination);
   // A2 delivery: the seller unloads the goods from the arriving means of transport
   // and places them at the buyer's disposal at the destination before the deadline.
+  // Alternatively the seller procures goods already so delivered (string sales).
   oDeliver: O(seller, buyer, true,
-              WhappensBefore(unloadedAtDestination, unloadedAtDestination.delDueDate)
-              and unloadedAtDestination.place == placeOfDestination);
+              (WhappensBefore(unloadedAtDestination, unloadedAtDestination.delDueDate)
+              and unloadedAtDestination.place == placeOfDestination)
+              or WhappensBefore(procuredSoDelivered, unloadedAtDestination.delDueDate));
   // A6: the seller provides the buyer with the document/notice that lets it take
   // delivery of the goods at the named place of destination.
-  oProvideDocuments: Happens(unloadedAtDestination) -> O(seller, buyer, true,
+  oProvideDocuments: (Happens(unloadedAtDestination) or Happens(procuredSoDelivered)) -> O(seller, buyer, true,
               Happens(documentsProvided));
+  // B7: the buyer clears the goods for import (licences, security clearance,
+  // duties) in time; its failure is this rule's B3(a) premature-transfer trigger.
+  oImportClearanceBuyer: O(buyer, seller, true, WhappensBefore(importClearedByBuyer, importClearedByBuyer.dueDate));
   // B2: the buyer takes delivery of the goods once they are at the destination.
-  oTakeDelivery: Happens(unloadedAtDestination) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  oTakeDelivery: (Happens(unloadedAtDestination) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
+  // At the buyer's request, risk and cost, the seller provides assistance with:
+  //   - A7(b): import clearance documents and information
+  oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
+              Happens(assistanceToBuyerProvided));
+  // B9: the buyer reimburses all costs of assistance it requested.
+  oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,
+              Happens(assistanceToBuyerReimbursed));
+  // At the seller's request, risk and cost, the buyer provides assistance with:
+  //   - B7(a): export/transit clearance documents and information
+  //   - B5: information the seller needs for obtaining insurance
+  oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
+              Happens(assistanceToSellerProvided));
+  // A9: the seller reimburses all costs of assistance it requested.
+  oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,
+              Happens(assistanceToSellerReimbursed));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered at the destination and evidenced
   // by the usual proof of delivery; this survives termination of the contract.
-  oPay: (Happens(unloadedAtDestination) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
+  oPay: ((Happens(unloadedAtDestination) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
+  // B3/B9(d): if the buyer fails its B7 import-clearance duty,
+  // the buyer bears the resulting additional costs - the rules' premature
+  // risk/cost transfer, guarded by the ICC proviso that the goods have been
+  // clearly identified as the contract goods. A surviving obligation: like
+  // the payment above, it outlives termination caused by the very failure
+  // that triggered it.
+  oFailureCosts: Happens(Violated(obligations.oImportClearanceBuyer)) ->
+              Obligation(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Powers
   // If the seller fails to contract carriage to the destination, the buyer may terminate.

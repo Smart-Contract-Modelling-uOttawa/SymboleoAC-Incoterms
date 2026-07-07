@@ -106,6 +106,9 @@ Domain / Rules / Policy views.
    (with the modelling device or the gap + rationale).
 4. Prefer verifying with a compile/scenario run over reasoning about the grammar.
 5. **Never `git add` `paper/`** — the JURIX draft is deliberately local-only.
-6. Known upstream codegen bug: the generated `createSurvivingObligation_*` uses an
-   undeclared `isNewInstance` and crashes at runtime; `tests/scenarios/generate.mjs`
-   (`patchCodegen`) rewrites it to `true`. Fix belongs in SymboleoAC2SC.
+6. The two upstream codegen bugs this repo used to patch around (undeclared
+   `isNewInstance` in `createSurvivingObligation_*`; arithmetic-in-consequent
+   metadata SyntaxError, SymboleoAC2SC#3) are **fixed in the generator**
+   (SymboleoAC-IDE / SymboleoAC-Web `claude/phase0-codegen-fixes`), and the
+   codegen CLI now `node --check`s every emitted file (C4). `patchCodegen` is
+   retired; tests need a jar/bridge built from those branches or later.

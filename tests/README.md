@@ -80,11 +80,14 @@ per-transaction re-init the Fabric wrapper does), since some norms are created
 lazily. `scenarios.mjs` holds the per-rule constructor args + event traces;
 `generate.mjs` (re)builds `generated/` (gitignored).
 
-> **Known upstream codegen bug (worked around):** the generated
-> `createSurvivingObligation_*` listener references an undeclared `isNewInstance`
-> (`!isNewInstance &&true`), throwing `ReferenceError` when any surviving `oPay`
-> is created. `generate.mjs` rewrites it to `true` on the way out (see
-> `patchCodegen`). Fix belongs in SymboleoAC2SC; remove the patch once landed.
+> **Upstream codegen bugs — fixed at the source (2026-07).** Two generator
+> defects used to be patched here on the way out (`patchCodegen`): the
+> undeclared `isNewInstance` in `createSurvivingObligation_*` and the
+> arithmetic-in-consequent metadata SyntaxError (SymboleoAC2SC#3). Both are
+> now fixed in the generator (SymboleoAC-IDE / SymboleoAC-Web
+> `claude/phase0-codegen-fixes`), the codegen CLI `node --check`s every file
+> it emits, and the patch layer is gone — the tests run the generator's
+> output verbatim.
 
 ## 4. Structural & differential — implemented ✅
 

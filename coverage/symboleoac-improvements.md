@@ -74,31 +74,47 @@ capability confirmed, documentation should say so).
 | C6 | Codegen should follow the ontology state machines (see O9/O10) or expose the violation policy as a generation option. | SymboleoAC2SC#2. | filed |
 | C7 | **Extend the Xtext validator with pragmatic well-formedness rules.** The current `SymboleoValidator` (17 active checks) is strong on reference/type consistency but nearly silent on what the codegen, runtime, and blockchain *assume*; two further checks (unique AC-rule names; the permission-giver rule) sit half-written and commented out. See the tiered rule set below. | Five probes against the deployed jar (2026-07-06): an Event with **no `performer`/`controller`** compiles 0/0 and its JS parses, yet every generated trigger transaction dereferences `_controller` for the AC layer — the event is untriggerable on-chain; a domain type `Function` + a variable named `constructor` compile and parse but silently corrupt the contract object (property shadowing); duplicate `Rule1:` names are accepted; a violation-triggered obligation in the *main* section is accepted although the runtime makes it stillborn (the `oFailureCosts` trap). Only the dangling-`obligations.X` probe was correctly rejected (scoping). | proposed |
 
-**C7 — proposed validation rules, tiered for backward compatibility.**
+**C7 — validation rules, tiered for backward compatibility (expert-reviewed
+2026-07-07).** The LLM's original 12-rule proposal was reviewed with domain
+experts; rule (1) was modified, (6) was promoted to an error, and (4), (5),
+(7), (10) were removed — the removal rationales are recorded below because
+the review itself is co-evolution data.
+
 *Errors* (structural requirements the generated code already assumes):
-(1) every Event type declares Role-typed `performer` and `controller`;
+(1) every Event type declares a Role-typed `performer`;
 (2) no identifier collides with JS/Java reserved words or generated member
 names (`constructor`, `state`, `obligations`, `notified`, …);
 (3) unique AC-rule names (finish the commented-out check);
-(4) cross-namespace identifier uniqueness (variables vs domain types vs norms).
+(6) every Role type declares the AC-required attributes
+(`name`/`org`/`dept`) — SymboleoAC2SC#1 at compile time instead of an
+on-chain "Unauthorized".
 *Warnings* (semantics traps found empirically in this corpus):
-(5) an obligation whose trigger contains `Violated(...)` should be a
-*surviving* obligation — retire once Phase 1's violation policy lands;
-(6) roles lacking the AC-required attributes (`name`/`org`/`dept`) — issue
-SymboleoAC2SC#1 as a compile-time warning instead of an on-chain
-"Unauthorized";
-(7) a deadline referencing an `Env` date attribute that may never be set
-(evaluates false forever);
 (8) arithmetic in a consequent — until C2 is fixed (pairs with C4).
 *Lints* (completeness/reachability):
-(9) finish the permission-giver check (the `by` role should be
-owner/controller/performer of the granted resource);
-(10) AC coverage — a `thirdParty` role appearing in no Grant;
+(9) finish the permission-giver check (the `by` role should be owner,
+controller, or performer of the granted resource);
 (11) dormant norms — a conditional norm whose trigger event appears nowhere
 else and has no performer path;
 (12) the validator's own TODO list: inheritance cycles, expression cycles.
 All are ordinary `@Check(FAST)` methods in one file with an existing tests
-module; warnings-first keeps every published spec compiling.
+module; the single warning tier keeps every published spec compiling.
+
+*Removed on expert review:*
+(4) cross-namespace uniqueness — unnecessary: name resolution is
+namespace-aware, so a variable and a domain type may legitimately share a
+name;
+(5) "violation-triggered obligations should be surviving" — wrong as a
+general rule: if the violation is *unhandled* the contract terminates
+unsuccessfully and only a surviving obligation survives (the Incoterms
+case), but if a power *handles* the violation the contract stays active and
+a main-section obligation is exactly right — whereas a surviving one would
+never activate;
+(7) unset-`Env`-deadline warning — a runtime/input concern, not a static
+property (Env values are the runtime's to supply);
+(10) "thirdParty role in no Grant" — not a defect: a third party assigned as
+performer/controller/owner can already act in that capacity without extra
+permissions, and additional rights can be granted or delegated dynamically
+at runtime.
 
 ## 4. Runtime (symboleoac-js-core)
 

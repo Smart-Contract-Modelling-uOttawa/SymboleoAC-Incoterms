@@ -99,6 +99,20 @@ else and has no performer path;
 All are ordinary `@Check(FAST)` methods in one file with an existing tests
 module; the single warning tier keeps every published spec compiling.
 
+**IMPLEMENTED 2026-07-07** — [SymboleoAC-IDE#1](https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC-IDE/pull/1)
+(validator + cycle-guarded `Helpers.getBaseType`/`getAttributesOfRegularType`,
+promoted E12a to an error because a cycle previously crashed the compiler) and
+[SymboleoAC-Web#6](https://github.com/Smart-Contract-Modelling-uOttawa/SymboleoAC-Web/pull/6)
+(vendored mirror; the deployed bridge keeps the old behaviour until rebuilt).
+Verified with the rebuilt jar: the corpus compiles 0-error (CIF/CIP correctly
+gain one W8 warning each on `oInsure`); the 147-test suite passes on
+regenerated code; seven deliberately broken probes now fail with the intended
+diagnostics — five of them previously passed validation and failed only at
+runtime or on-chain. Bonus corpus finding from L9: the `billOfLading` grants
+(write `blNumber`; transfer) are given *by seller* although the asset's
+declared owner is the *carrier* — flagged as info; worth an ACPolicy review
+(grant by carrier, or co-controllers).
+
 *Removed on expert review:*
 (4) cross-namespace uniqueness — unnecessary: name resolution is
 namespace-aware, so a variable and a domain type may legitimately share a

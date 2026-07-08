@@ -16,11 +16,11 @@ coverage analysis and validation, backing a paper. Read `STRATEGY.md` first.
 - `tests/compile/run.{sh,ps1}` — compile gate. CI uses the **remote bridge**
   (`BACKEND_URL`, default `https://159-69-216-244.sslip.io`); local dev uses the
   **jar** (`CODEGEN_JAR`). Same JSON either way.
-- `tests/scenarios/` — **151 Node tests** (happy, breach/suspend, power
-  coverage, ICC features, structural/differential, and the phase-1
-  runtime-semantics witnesses) on the generated JS; `npm run coverage` (c8)
-  ≈90% line. `symboleoac-js-core` is temporarily pinned to the
-  `claude/phase1-runtime-semantics` git branch until it is merged/released.
+- `tests/scenarios/` — **153 Node tests** (happy, breach/suspend, power
+  coverage, ICC features, structural/differential, plus the phase-1
+  runtime-semantics and phase-3 transfer witnesses) on the generated JS;
+  `npm run coverage` (c8) ≈90% line. Depends on `symboleoac-js-core@^1.0.27`
+  from npm (Phase 1 + Phase 3 runtime).
 - `coverage/coverage-matrix.md` — fully filled A1–A10/B1–B10 × 11, with
   cross-cutting differential notes.
 - `deploy/README.md` — **verified** Hyperledger Fabric deployment guide (FOB was

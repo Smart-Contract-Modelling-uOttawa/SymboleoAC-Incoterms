@@ -40,10 +40,12 @@ Domain cifDomain
   // A4 (2020): the seller complies with transport-related security requirements
   // for the transport to the destination.
   SecurityComplied isAn Event with performer: Seller, controller: Seller;
-  // A5: seller takes out cargo insurance for the buyer's benefit. The named
-  // clause set (ICC (A)/(C)) stays data (coverLevel); the minimum insured
-  // amount (110% of the price) and the contract currency are checked in oInsure.
-  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, Env insuredAmount: Number, Env insuredCurrency: Currency, performer: Seller, controller: Seller;
+  // A5: seller takes out cargo insurance for the buyer's benefit. The ICC
+  // cover clauses form an ORDERED enumeration (C < B < A: minimum to broadest);
+  // oInsure requires the obtained cover to be at least the rule's minimum, plus
+  // the minimum insured amount (110% of the price) and the contract currency.
+  ICCClause isAn Enumeration(C, B, A);
+  InsuranceObtained isAn Event with Env coverLevel: ICCClause, Env policyNumber: String, Env insuredAmount: Number, Env insuredCurrency: Currency, performer: Seller, controller: Seller;
   // A5: the seller provides the buyer with the policy/certificate or other
   // evidence of the insurance cover.
   InsuranceDocProvided isAn Event with performer: Seller, controller: Seller;
@@ -95,7 +97,7 @@ endDomain
 Contract CIF (
   sellerP: Seller, buyerP: Buyer, carrierP: Carrier,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  portOfShipment: String, portOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, insuranceCover: String
+  portOfShipment: String, portOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
 )
 
 Declarations
@@ -112,7 +114,7 @@ Declarations
   carriageContracted: CarriageContracted with destinationPort := portOfDestination, dueDate := Date.add(effDate, carriageDays, days), performer := seller, controller := seller;
   importClearedByBuyer: ImportClearedByBuyer with dueDate := Date.add(effDate, importDays, days), performer := buyer, controller := buyer;
   securityComplied: SecurityComplied with performer := seller, controller := seller;
-  insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;
+  insuranceObtained: InsuranceObtained with performer := seller, controller := seller;
   insuranceDocProvided: InsuranceDocProvided with performer := seller, controller := seller;
   additionalCoverRequested: AdditionalCoverRequested with performer := buyer, controller := buyer;
   additionalCoverInfoGiven: AdditionalCoverInfoGiven with performer := buyer, controller := buyer;
@@ -155,13 +157,14 @@ Obligations
   oContractCarriage: O(seller, buyer, true,
               WhappensBefore(carriageContracted, carriageContracted.dueDate)
               and carriageContracted.destinationPort == portOfDestination);
-  // A5: the seller takes out cargo insurance (min. ICC (C) - recorded as
-  // data) covering at least 110% of the price, in the contract currency -
-  // both checked as constraints on the insurance event.
+  // A5: the seller takes out cargo insurance of at least ICC (C)
+  // (an ordered-enum minimum, checked), covering at least 110% of the price,
+  // in the contract currency - all three checked on the insurance event.
   oInsure: O(seller, buyer, true, (ShappensBefore(insuranceObtained, loadedOnBoard)
               or ShappensBefore(insuranceObtained, procuredSoDelivered))
               and insuranceObtained.insuredAmount >= 1.1 * price
-              and insuranceObtained.insuredCurrency == curr);
+              and insuranceObtained.insuredCurrency == curr
+              and insuranceObtained.coverLevel >= ICCClause(C));
   // A5: the seller provides the buyer with the policy/certificate or other
   // evidence of cover (the buyer may claim directly from the insurer).
   oProvideInsuranceDoc: Happens(insuranceObtained) -> O(seller, buyer, true,

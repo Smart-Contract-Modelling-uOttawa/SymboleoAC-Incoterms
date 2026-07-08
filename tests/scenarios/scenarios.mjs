@@ -62,9 +62,11 @@ export const RULES = [
   },
   {
     code: 'CIF',
-    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, 'ICC(C) 110%'],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY],
+    // L2: coverLevel is an ordered-enum ordinal (ICCClause C=0,B=1,A=2); CIF's
+    // floor is ICC(C), so obtaining ICC(A)=2 satisfies `coverLevel >= ICC(C)`.
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'),
-      ev('insuranceObtained', { insuredAmount: 5500, insuredCurrency: 'USD' }), ev('insuranceDocProvided'),
+      ev('insuranceObtained', { insuredAmount: 5500, insuredCurrency: 'USD', coverLevel: 2 }), ev('insuranceDocProvided'),
       ev('loadedOnBoard'), ...withBoLDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted'), ev('insuranceObtained')], violate: 'oInsure', power: 'pTerminateNoInsurance' },
   },
@@ -76,9 +78,11 @@ export const RULES = [
   },
   {
     code: 'CIP',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, 'ICC(A) 110%'],
+    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY],
+    // L2: CIP's floor is ICC(A) (Incoterms 2020 raised it), so the seller must
+    // obtain exactly ICC(A)=2 to satisfy `coverLevel >= ICC(A)`.
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'),
-      ev('insuranceObtained', { insuredAmount: 5500, insuredCurrency: 'USD' }), ev('insuranceDocProvided'),
+      ev('insuranceObtained', { insuredAmount: 5500, insuredCurrency: 'USD', coverLevel: 2 }), ev('insuranceDocProvided'),
       ev('handedToFirstCarrier'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oInsure', power: 'pTerminateNoInsurance' },
   },

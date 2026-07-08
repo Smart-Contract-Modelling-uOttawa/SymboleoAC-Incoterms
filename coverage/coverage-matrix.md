@@ -22,7 +22,7 @@ FAS/any-mode proof-of-delivery vs a bill of lading), see the cross-cutting notes
 | A2 | Delivery (delivery point) | `oDeliver` obligation; delivery event; **string-sale disjunct** (`or WhappensBefore(procuredSoDelivered, …)`) in all 10 non-EXW rules | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | A3 | Transfer of risks | **no first-class risk incidence**; but the *exception logic* is modelled: delivery trigger + surviving pay, plus the B3 premature-transfer limbs via `oFailureCosts` (see B3) | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | A4 | Carriage | carriage event / obligation (seller side for C/D rules); E/F transport-info duty via the assistance channel; **`oSecurityCompliance`** (2020 security duty, all but EXW; delivery-bounded for F, unbounded for C/D); the optional F-term seller-carriage ("if agreed") still unmodelled | ◐ | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ | ✅ | ✅ |
-| A5 | Insurance | CIF/CIP: `oInsure` now **checks 110% of price + contract currency** as constraints, plus `oProvideInsuranceDoc` (certificate) and the conditional War/Strikes mechanism (`oAdditionalCover` with the B5 info antecedent + `oPayAdditionalCover`); the named clause set ICC (A)/(C) stays data — hence still ◐. Info duty of the other rules via the assistance channel | ◐ | ◐ | ◐ | ◐ | — | — | — | ◐ | ◐ | ◐ | ◐ |
+| A5 | Insurance | CIF/CIP: `oInsure` **checks all three A5 requirements** — 110% of price, contract currency, and the ICC cover clause as an **ordered enumeration** (`coverLevel >= ICCClause(C)` for CIF, `>= ICCClause(A)` for CIP; L2, Phase 2) — plus `oProvideInsuranceDoc` (certificate) and the conditional War/Strikes mechanism (`oAdditionalCover` + `oPayAdditionalCover`). The clause set is no longer a bare string, so CIF/CIP are now ✅. Info duty of the other rules via the assistance channel | ◐ | ◐ | ◐ | ✅ | — | — | — | ◐ | ◐ | ◐ | ✅ |
 | A6 | Delivery / transport document | FOB/CFR/CIF: `BillOfLading` + issuance + `oProvideDocuments` **with content constraints** (dated within the shipment period; negotiable ⇒ full set of originals); others: `DocumentsProvided` proof; FCA adds the optional on-board-B/L mechanism. CPT/CIP's conditional document duty and *document-of-title*/sale-in-transit semantics remain the gaps | — | ✅ | ◐ | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | A7 | Export/import clearance | `oExportClearance` obligation; EXW's assistance-only A7 via the assistance channel | ◐ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | A8 | Checking / packaging / marking | `oPackage` (`PackagedAndMarked` strictly before either delivery limb); the two "unless" defeaters (unpackaged trade usage; agreed specific requirements) are recorded, not modelled — defeasibility is a language limit | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
@@ -67,6 +67,20 @@ FAS/any-mode proof-of-delivery vs a bill of lading), see the cross-cutting notes
   the endorsability/document-of-title device A6 was missing (runtime
   enforcement of transfer is the next upstream probe; see
   `symboleoac-improvements.md` O4b).
+- **2026-07-08 Phase 2 (L4 + L2).** Two small language increments, neither
+  needing a grammar change. **L4 (event-relative deadlines):**
+  `Date.add(eventVar, n, units)` on a bare Event variable now means *n units
+  after the event occurred* — the validator accepts an Event-typed arg1 and
+  the generator emits the event's `._timestamp`. Delivered as a language
+  feature (SymboleoAC-IDE/Web `claude/phase2-l4-l2`); its corpus wiring into
+  the assistance-reimbursement deadlines is a scoped follow-up. **L2 (ordered
+  enumerations):** needed *no* code change — enums already generate as ordinal
+  objects (`{C:0,B:1,A:2}`) and `PComparison` already emits numeric
+  comparison — so it was exercised directly in the corpus: CIF/CIP's `oInsure`
+  now checks `insuranceObtained.coverLevel >= ICCClause(min)` (CIF≥C, CIP≥A),
+  moving **A5 ◐→✅ for CIF and CIP** (the clause set is a checked ordered enum,
+  not a bare string). Witnessed in `phase2-semantics.test.mjs` (ICC(B) fails
+  CIP's ICC(A) floor; boundary ICC(C) passes CIF).
 - **2026-07-08 Phase 3: transfer is now enforced AND executed (O4b).** js-core
   1.0.27 gives `transfer`/`Revoke`/`all` real runtime semantics and adds
   `ACPolicy.transferResource`; the generator emits a `transferResource_<var>`

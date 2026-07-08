@@ -102,12 +102,15 @@ CODEGEN_JAR=/path/to/symboleoac-codegen-cli-*-all.jar node generate.mjs FOB   # 
 cp -r generated/FOB /path/to/net/FOB
 ```
 
-**Fix 2 — the `isNewInstance` codegen bug.** The generated
-`createSurvivingObligation_*` listener references an undeclared `isNewInstance`,
-crashing the chaincode at runtime the moment the surviving `oPay` obligation is
-created. `generate.mjs` rewrites it to `true` (`patchCodegen`); confirm with
-`grep -c 'isNewInstance &&true' FOB/events.js` → `0`. (Upstream fix belongs in
-SymboleoAC2SC.)
+**Fix 2 — the `isNewInstance` codegen bug (fixed upstream 2026-07).** The
+generated `createSurvivingObligation_*` listener used to reference an
+undeclared `isNewInstance`, crashing the chaincode at runtime the moment the
+surviving `oPay` obligation was created. The generator now declares it
+(SymboleoAC-IDE / SymboleoAC-Web `claude/phase0-codegen-fixes`); a jar built
+from those branches emits correct listeners, so no rewrite step is needed.
+Confirm with `grep -c 'const isNewInstance' FOB/events.js` → non-zero in
+every `createSurvivingObligation_*`. (With an older jar/bridge, the retired
+`patchCodegen` rewrite in this repo's git history is the workaround.)
 
 ## 3. Deploy
 
@@ -239,7 +242,7 @@ no need for the Application-API:
 |---|---------|-----------|-----|
 | 0 | Docker engine won't start | phantom AF_UNIX sockets + Model Runner | rename `run`/`docker-secrets-engine` dirs; `docker desktop disable model-runner` |
 | 1 | `Peer binary … not found` | `network.sh` uses `bin-macos` | `sed -i 's/bin-macos/bin/g' network.sh` |
-| 2 | chaincode crashes at `oPay` | `isNewInstance` codegen bug | patched by `tests/scenarios/generate.mjs` |
+| 2 | chaincode crashes at `oPay` | `isNewInstance` codegen bug | fixed in the generator (SymboleoAC-IDE `claude/phase0-codegen-fixes`); older jars: retired `patchCodegen` in git history |
 | 3 | `npm install` `UNABLE_TO_VERIFY_LEAF_SIGNATURE` | TLS-intercepting proxy | `.npmrc` `strict-ssl=false` in the chaincode |
 | 4 | container exits with `SyntaxError: '='` | `fabric-nodeenv:2.2` is Node 12 | retag `fabric-nodeenv:2.5` (Node 22) as `2.2` |
 | 5 | `Unauthorized: Unknown access` | roles lack `dept`; caller lacks role attrs | add `dept` to roles; enroll role identities (Application-API) |

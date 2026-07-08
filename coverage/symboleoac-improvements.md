@@ -66,10 +66,10 @@ capability confirmed, documentation should say so).
 
 | ID | Finding / proposal | Evidence | Status |
 |----|--------------------|----------|--------|
-| C1 | `createSurvivingObligation_*` references an undeclared `isNewInstance` (crashes every surviving obligation at runtime); a second shape appears when the surviving antecedent is non-trivial. | Patched in `tests/scenarios/generate.mjs` (`patchCodegen`, two patterns); mentioned in issue #2. | patched |
-| C2 | **Arithmetic in a consequent** emits a JS `SyntaxError` in the contract class's `LegalSituation` metadata builder (nested, mis-quoted `addConsequentOf` in `rightSide`), while the norm-evaluation condition is generated correctly. The spec compiles 0/0 — only execution catches it. | Filed as SymboleoAC2SC#3; patched in `patchCodegen`. | filed+patched |
+| C1 | `createSurvivingObligation_*` references an undeclared `isNewInstance` (crashes every surviving obligation at runtime); a second shape appears when the surviving antecedent is non-trivial. | Was patched in `tests/scenarios/generate.mjs` (`patchCodegen`, two patterns); mentioned in issue #2. **Fixed 2026-07-07** in `Symboleo2SC.xtend` (declaration mirrors `createObligation_*`), on the `claude/phase0-codegen-fixes` branches of SymboleoAC-IDE and SymboleoAC-Web; `patchCodegen` retired. | **fixed** (PR pending) |
+| C2 | **Arithmetic in a consequent** emits a JS `SyntaxError` in the contract class's `LegalSituation` metadata builder (nested, mis-quoted `addConsequentOf` in `rightSide`), while the norm-evaluation condition is generated correctly. The spec compiles 0/0 — only execution catches it. | Filed as SymboleoAC2SC#3; was patched in `patchCodegen`. **Fixed 2026-07-07**: `generateLegalpositionCondition`'s `PArithmetic` case now emits the operand flat (`left op right`) instead of wrapping it in another `addAC(...)` call — an arithmetic node is an operand of the enclosing comparison, not a condition of its own. Same branches as C1; W8 retired with it. | **fixed** (PR pending) |
 | C3 | Roles need a `dept` attribute for the generated `authenticate`; the compiler should add/require it instead of failing opaquely on-chain with "Unauthorized". | Filed as SymboleoAC2SC#1. | filed |
-| C4 | **Add a generated-JS self-check** (`node --check` over every emitted file) to the codegen pipeline, so C2-class defects fail the *compile* gate rather than surfacing at deployment. | The 0-error/0-warning gate passed while the generated CIF.js was unparseable. | proposed |
+| C4 | **Add a generated-JS self-check** (`node --check` over every emitted file) to the codegen pipeline, so C2-class defects fail the *compile* gate rather than surfacing at deployment. | The 0-error/0-warning gate passed while the generated CIF.js was unparseable. **Implemented 2026-07-07** in `codegen-cli` (SymboleoAC-Web `claude/phase0-codegen-fixes`): failures become ERROR issues (`generated-js-syntax`), non-zero `summary.errors`, exit 1; skipped with a stderr note where `node` is absent (the bridge image ships node). Detection verified live: a jar with C4 but *without* the C2 fix rejected CIF with the exact SyntaxError that previously reached deployment. | **implemented** (PR pending) |
 | C5 | `getState` returns prose, `getLegalPositionStateAndTime` returns JSON — unify on JSON for machine consumption. | On-chain verification had to parse a human-oriented string. | proposed |
 | C6 | Codegen should follow the ontology state machines (see O9/O10) or expose the violation policy as a generation option. | SymboleoAC2SC#2. | filed |
 | C7 | **Extend the Xtext validator with pragmatic well-formedness rules.** The current `SymboleoValidator` (17 active checks) is strong on reference/type consistency but nearly silent on what the codegen, runtime, and blockchain *assume*; two further checks (unique AC-rule names; the permission-giver rule) sit half-written and commented out. See the tiered rule set below. | Five probes against the deployed jar (2026-07-06): an Event with **no `performer`/`controller`** compiles 0/0 and its JS parses, yet every generated trigger transaction dereferences `_controller` for the AC layer — the event is untriggerable on-chain; a domain type `Function` + a variable named `constructor` compile and parse but silently corrupt the contract object (property shadowing); duplicate `Rule1:` names are accepted; a violation-triggered obligation in the *main* section is accepted although the runtime makes it stillborn (the `oFailureCosts` trap). Only the dangling-`obligations.X` probe was correctly rejected (scoping). | proposed |
@@ -90,6 +90,30 @@ names (`constructor`, `state`, `obligations`, `notified`, …);
 on-chain "Unauthorized".
 *Warnings* (semantics traps found empirically in this corpus):
 (8) arithmetic in a consequent — until C2 is fixed (pairs with C4).
+*(Retired 2026-07-07: C2 is fixed, so W8 has no remaining purpose — an
+example of a validator rule whose designed lifetime ends with the defect it
+guards; CIF/CIP return to 0-warning.)*
+(13) **unused definitions** (added on expert request 2026-07-07): a domain
+type, contract parameter, or declared instance that nothing references —
+leftover from an edit, or a sign an intended reference was never written;
+each also has a deployment cost (a generated class, a required
+instantiation argument, an initialized instance). Implementation note: the
+two reference mechanisms differ — variables/parameters are referenced *by
+name string* in dot expressions, domain types by real EMF cross-references
+(declared/attribute/parameter types, `isA` supertypes, enum literals) — so
+the check scans both. The 11-spec corpus is W13-clean (the generator's
+per-rule domain pruning holds), verified by probe.
+
+**Message-quality convention (expert request 2026-07-07):** every validator
+diagnostic (pre-C7 and C7 alike) now states *what* is wrong naming the
+offending element, *why* it matters downstream, and *how* to fix it — the
+consumers are humans **and LLMs in compile-fix loops**. The pass rewrote
+all ~25 pre-C7 messages (among them a garbled one — "should start no
+valuable input a lowercase letter" — and several truncated one-liners) and
+added found-vs-expected types to the function-argument checks. The C4
+generated-JS error now tells the fixing agent explicitly that the *spec is
+not at fault* (it validated clean) so a compile-fix loop reports the
+generator bug instead of mutating the contract.
 *Lints* (completeness/reachability):
 (9) finish the permission-giver check (the `by` role should be owner,
 controller, or performer of the granted resource);
@@ -171,6 +195,20 @@ this is local and buildable (the templates live in `Symboleo2SC.xtend` /
 compile gate trustworthy, and moves four empirically-discovered deployment
 failures (untriggerable events, shadowed members, opaque on-chain
 "Unauthorized", stillborn reparations) to compile time.
+
+> **Phase 0 status (2026-07-07): C7 implemented (expert-reviewed, PRs
+> SymboleoAC-IDE#1 / SymboleoAC-Web#6); C1/C2 fixed and C4 implemented on
+> the stacked `claude/phase0-codegen-fixes` branches; W8 retired with C2;
+> W13 (unused definitions) and the all-messages self-explainability pass
+> added on expert request; `patchCodegen` retired in this repo.** Verification sequence worth
+> reporting: C4 was built *before* the C2 fix and correctly failed the gate
+> on CIF's then-unparseable contract class; after the C2 fix the corpus
+> generates 0-error/0-warning and the full suite passes on unpatched
+> generator output. Remaining Phase-0 items: C3 dept handling in the
+> compiler (the generator side already emits `dept`; the validator error
+> E6 covers specs), T3 network fixes (documented in deploy/README.md,
+> upstream PR still to file), and the bridge redeploy so CI and the Web
+> IDE enforce all of it.
 
 **Phase 1 — runtime semantics (weeks; js-core + codegen).**
 R4/O9: violation defers whole-contract termination when a remedial power or

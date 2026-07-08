@@ -5,8 +5,14 @@
 //   CODEGEN_JAR  local codegen-cli fat jar (preferred for local dev), or
 //   BACKEND_URL  the deployed SymboleoAC-Web bridge (used by CI).
 //
-// A known upstream codegen defect is patched on the way out (see patchCodegen).
 // The generated/ tree is disposable (gitignored) — regenerate with `npm run gen`.
+//
+// The generated JS is used as-is. (Until 2026-07, a patchCodegen step here
+// worked around two upstream generator defects — the undeclared isNewInstance
+// in createSurvivingObligation_* and the arithmetic-in-consequent metadata
+// SyntaxError, SymboleoAC2SC#3. Both are fixed in the generator itself, and
+// the codegen CLI now node --checks everything it emits, so a regression
+// fails generation right here.)
 
 import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -18,39 +24,6 @@ const specsDir = path.resolve(here, '..', '..', 'specs');
 const outDir = path.join(here, 'generated');
 
 export const ALL_CODES = ['EXW', 'FCA', 'FAS', 'FOB', 'CPT', 'CFR', 'CIP', 'CIF', 'DAP', 'DPU', 'DDP'];
-
-// KNOWN UPSTREAM CODEGEN BUG (SymboleoAC2SC): the generated
-// createSurvivingObligation_<x> listener references an undeclared
-// `isNewInstance` (the regular createObligation_<x> listeners declare it), so
-// the guard `!isNewInstance &&true` throws `ReferenceError: isNewInstance is
-// not defined` the moment a surviving obligation (every spec's oPay) is created.
-// We rewrite it to `true`, which is the intended behaviour for a freshly
-// created surviving obligation. Remove this once the generator is fixed.
-export function patchCodegen(js) {
-  // Exact shape emitted for antecedent-`true` surviving obligations (oPay).
-  js = js.split('!isNewInstance &&true').join('true');
-  // General shape: any other use of the undeclared identifier inside a
-  // createSurvivingObligation_* body (e.g. oFailureCosts, whose antecedent is
-  // the goods-identified proviso) — declare it at the top of the function.
-  // The legitimate inner `const isNewInstance = ...` shadows this harmlessly.
-  js = js.replace(
-    /createSurvivingObligation_(\w+)\(contract\) \{\n/g,
-    (m, name) =>
-      `createSurvivingObligation_${name}(contract) {\n` +
-      `    const isNewInstance = contract.survivingObligations.${name} != null && contract.survivingObligations.${name}.isFinished();\n`,
-  );
-  // SECOND UPSTREAM CODEGEN BUG: an arithmetic expression in a consequent
-  // (e.g. `insuredAmount >= 1.1 * price`) is compiled correctly in the norm
-  // evaluation (events.js) but the LegalSituation metadata builder in the
-  // contract class nests a stringified addConsequentOf(...) inside the
-  // rightSide string with unescaped quotes - a JS SyntaxError ("Unexpected
-  // number"). Rewrite the nested garbage into the intended flat expression.
-  js = js.replace(
-    /rightSide: 'this\.\w+Situation\.addConsequentOf\(\{ leftSide:'([\d.]+)', op:'([*+/-])',\s*rightSide: '([\w.]+)', _type: 'Condition'\}\)\s*\n\s*', _type: 'Condition'\}\)/g,
-    "rightSide: '$1 $2 $3', _type: 'Condition'})",
-  );
-  return js;
-}
 
 async function generateFiles(source) {
   if (process.env.CODEGEN_JAR) {
@@ -82,7 +55,7 @@ export async function generate(codes = ALL_CODES) {
     for (const [rel, content] of Object.entries(files)) {
       const full = path.join(outDir, rel);
       mkdirSync(path.dirname(full), { recursive: true });
-      writeFileSync(full, rel.endsWith('.js') ? patchCodegen(content) : content);
+      writeFileSync(full, content);
     }
     console.log(`gen ${code}: ${Object.keys(files).length} files`);
   }

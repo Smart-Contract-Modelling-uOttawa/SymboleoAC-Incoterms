@@ -48,7 +48,7 @@ capability confirmed, documentation should say so).
 | O7 | **Make the reparation pattern explicit.** `Obligation.surviving` is a bare Boolean; nothing says *violation-triggered reparations must be surviving to survive the violation they respond to*. Consider a `Reparation` specialization or a well-formedness rule. | `oFailureCosts` (B9(d)) was stillborn as a regular obligation — created and instantly swept by the violation-triggered contract termination; moving it to Surviving Obligations was both the fix and the semantically right reading. Only execution revealed this. | proposed |
 | O8 | **Operations on `TimePoint`/`TimeInterval`.** Both are contentless classes; there is no event-time arithmetic. | DDP's B7-assistance B3 limb needs "within *N* days of the request" — a deadline relative to an event occurrence — inexpressible; only `Date.add` over contract parameters exists. | proposed |
 | O9 | **Contract state machine: codegen deviates from the ontology.** In SymboleoAC.ump (identically in the core ontology), a contract reaches `UnsuccessfulTermination` only via `terminated` (a power's exercise). The generated runtime unsuccessfully terminates the whole contract *the moment any obligation is violated*, killing the remedial powers the violation just created. | Filed as SymboleoAC2SC#2 with reproduction; forced the surviving-reparation workaround (O7) and reshaped the suspend/resume test design. The ontology is right; the codegen should follow it (or make the policy configurable). | filed |
-| O10 | **Obligation state machine: antecedent bypassed at creation.** Ontology: `triggeredConditional → Create --activated--> InEffect`. Codegen: `trigerredUnconditional()` is called for every new instance, so an obligation with an unsatisfied antecedent is already InEffect. | `oFailureCosts`' goods-identification proviso and `oAdditionalCover`'s information precondition are enforced only by a separate activate-listener; firing the antecedent event *before* creation works by accident of ordering. | proposed |
+| O10 | **Obligation state machine: antecedent bypassed at creation.** Ontology: `triggeredConditional → Create --activated--> InEffect`. Codegen: `trigerredUnconditional()` is called for every new instance, so an obligation with an unsatisfied antecedent is already InEffect. | `oFailureCosts`' goods-identification proviso and `oAdditionalCover`'s information precondition are enforced only by a separate activate-listener; firing the antecedent event *before* creation works by accident of ordering. **Implemented 2026-07-08** (SymboleoAC-IDE#4 / SymboleoAC-Web#9): the createObligation_ guard is now `!isNewInstance && (antecedent)` with an else → `trigerredConditional()`, exactly like powers; surviving obligations already routed. Residual (not corpus-reachable): the init transaction's declaration-time obligations. Corpus witness: CIF `oAdditionalCover` sits in Create until the information event. | **implemented** (PR pending) |
 
 ## 2. Language / grammar
 
@@ -166,10 +166,11 @@ at runtime.
 
 | ID | Finding / proposal | Evidence | Status |
 |----|--------------------|----------|--------|
-| R1 | **Interval-based `HappensWithin`.** The implementation is state-based (`event.hasHappened() && object.isSuspended()`): an event that happened *before* a suspension counts as happening *within* it. | The pResumeDelivery cycle relies on a re-dispatch of an old nomination during suspension — semantically a late nomination, operationally a replay. `Situation.time: TimeInterval` exists in the ontology; the runtime ignores it. | proposed |
+| R1 | **Interval-based `HappensWithin`.** The implementation is state-based (`event.hasHappened() && object.isSuspended()`): an event that happened *before* a suspension counts as happening *within* it. | The pResumeDelivery cycle relies on a re-dispatch of an old nomination during suspension — semantically a late nomination, operationally a replay. `Situation.time: TimeInterval` exists in the ontology; the runtime ignores it. **Implemented 2026-07-08** (SymboleoAC-JS-Core#1): episode-based over the transition stamps the state machines already record (`[entry, exit]` closed, `[entry, now)` open; per-state entry/exit table; state-based fallback when stamps are absent). Corpus witness: a backdated nomination is no longer "within" the suspension. | **implemented** (PR pending) |
 | R2 | **Subscription model is object-reference-based**; listeners bound at map-build time miss norms created later, so every emit requires rebuilding the event map. | The harness re-inits before every fire (as the Fabric wrapper accidentally does per transaction); a name-based registry would remove the trap for any long-lived (non-Fabric) host. | proposed |
 | R3 | **Event occurrences are single-shot.** `happen()` re-stamps the same object; there is no occurrence history. | A re-tendered document (B6 conforming re-tender) is really a *second occurrence* of `DocumentsProvided`; we model it by attribute mutation. Recurring obligations (periodic payments) would hit this wall immediately. | proposed |
-| R4 | Violation → eager whole-contract termination (runtime side of O9/C6). | SymboleoAC2SC#2. | filed |
+| R4 | Violation → eager whole-contract termination (runtime side of O9/C6). | SymboleoAC2SC#2. **Implemented 2026-07-08** (SymboleoAC-JS-Core#1): a violation defers termination when *handled* — a power it created, any live power, or a reparation obligation it brought to life; unhandled violations still auto-terminate. Per-contract `violationPolicy`: `auto` (default) / `eager` (old behaviour) / `manual` (ontology-strict: only powers terminate). Corpus witness: a second violation no longer sweeps a pending terminate power. | **implemented** (PR pending) |
+| R5 | **Timestamps truncated to the minute.** `Event.happen()` zeroes seconds/milliseconds (presumably so Fabric endorsers agree on `new Date()`), so same-minute ordering is indistinguishable — which also caps R1's interval precision — and wall-clock `new Date()` is endorser-dependent anyway; the principled fix is the Fabric transaction timestamp (`ctx.stub.getTxTimestamp()`). | Found implementing R1: the corpus tests cannot discriminate same-minute pre-suspension events without explicit backdating. | proposed |
 
 ## 5. Tooling (Web IDE, bridge, Application-API, test network)
 
@@ -178,6 +179,7 @@ at runtime.
 | T1 | **Role-identity provisioning should be first-class.** The Application-API hard-codes a `fabric-network-2.2.2` layout and macOS paths; we bypassed it with direct `fabric-ca-client` enrollment (attrs as `ecert`, NodeOU config copy) — now documented in `deploy/README.md` §5. | Full authorized on-chain happy path (11 transactions, 3 identities) achieved CLI-only. | proposed |
 | T2 | IDE/bridge lints: warn on roles without `dept` (AC will reject on-chain), and surface the C4 generated-JS check in the Web IDE's Generate flow. | Both failure modes are invisible until deployment today. | proposed |
 | T3 | Test network `network.sh` hard-codes `bin-macos`; Fabric 2.2's `fabric-nodeenv` is Node 12 (crashes on modern syntax). Fix/retag upstream. | deploy/README.md fixes 1 and 4. **Filed 2026-07-08** as SymboleoAC-HyperledgerFabric-Test-Netwrok#1 and #2 (with the workarounds and suggested fixes). | filed |
+| T4 | **js-core package hygiene.** `flatted` and `fabric-contract-api` were undeclared dependencies (the package only worked where the consumer installed both); the mocha suite could not even load (imports from the pre-restructuring `../core/*` layout and from the sibling `symboleo-js-core` package), and once loadable, 16 of 21 legacy tests fail from API drift. | Found wiring the corpus to a local js-core clone for Phase 1. Paths+deps fixed in SymboleoAC-JS-Core#1 (first commit); the 16 stale tests are recorded as the baseline, still to reconcile. | partially fixed (PR pending) |
 
 ---
 
@@ -227,6 +229,21 @@ honour antecedents at creation (Create until activated); R1 interval-based
 surviving remains the better legal reading — the paper can discuss both);
 breach scenarios can continue past a violation, so suspend→resume after a
 late nomination becomes semantically clean rather than replay-based.
+
+> **Phase 1 status (2026-07-08): implemented, PRs pending.**
+> SymboleoAC-JS-Core#1 (violation policy `auto`/`eager`/`manual` + episode-
+> based `HappensWithin` + 12 unit tests + package hygiene, T4) and
+> SymboleoAC-IDE#4 / SymboleoAC-Web#9 (O10 antecedent routing, one guard).
+> Headline verification result: **all 147 existing scenario tests pass
+> unchanged** on the new stack — the corpus never depended on the deviant
+> behaviours — plus 4 new corpus witnesses of the new semantics
+> (deferral-to-live-power incl. the kept unhandled-termination baseline;
+> Create-until-antecedent on CIF's `oAdditionalCover`; the backdated
+> nomination excluded from the suspension episode): 151/151. New findings
+> minted along the way: R5 (minute-truncated timestamps) and T4. C7 warning
+> (5) needed no retiring — the expert review had already removed it.
+> Remaining for the phase: merge + npm release (the corpus temporarily pins
+> the js-core git branch), bridge redeploy, and the FOB Fabric redeploy.
 
 **Phase 2 — small language increments (weeks; grammar + codegen).**
 L2 ordered enumerations; L4/O8 event-relative deadlines; L1 conditional

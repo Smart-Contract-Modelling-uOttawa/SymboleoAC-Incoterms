@@ -10,7 +10,12 @@ Domain cifDomain
   // The goods sold; owner defaults to the seller until delivery.
   Goods isAn Asset with description: String, quantity: Number, owner: Seller;
   // The bill of lading: the transport document evidencing shipment on board.
-  BillOfLading isAn Asset with blNumber: String, owner: Carrier;
+  // The carrier issues it TO the shipper (Hague-Visby art. III(3)), so the
+  // seller is the document's owner/holder: it authorizes the carrier to fill
+  // in the number at issuance and endorses the document to the buyer (the
+  // buyer's transfer grant). The carrier's own authority is over the
+  // issuance event, of which it is performer and controller.
+  BillOfLading isAn Asset with blNumber: String, owner: Seller;
   // B10 (conditional): the parties may agree that the buyer is entitled to
   // determine the time and/or point of delivery (recorded by ScheduleRightAgreed);
   // the buyer must then give sufficient notice in time.
@@ -98,7 +103,7 @@ Declarations
   buyer: Buyer with name := buyerP.name, org := buyerP.org, dept := buyerP.dept;
   carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;
   goods: Goods with description := goodsDesc, quantity := qty, owner := seller;
-  billOfLading: BillOfLading with blNumber := "", owner := carrier;
+  billOfLading: BillOfLading with blNumber := "", owner := seller;
   scheduleRightAgreed: ScheduleRightAgreed with performer := buyer, controller := buyer;
   scheduleNotified: ScheduleNotified with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;
   invoiceProvided: InvoiceProvided with performer := seller, controller := seller;

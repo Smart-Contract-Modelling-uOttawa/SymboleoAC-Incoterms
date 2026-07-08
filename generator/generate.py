@@ -579,7 +579,12 @@ def emit_domain(c: RuleConfig) -> list[str]:
     if p.has_bol:
         L += [
             "  // The bill of lading: the transport document evidencing shipment on board.",
-            "  BillOfLading isAn Asset with blNumber: String, owner: Carrier;",
+            "  // The carrier issues it TO the shipper (Hague-Visby art. III(3)), so the",
+            "  // seller is the document's owner/holder: it authorizes the carrier to fill",
+            "  // in the number at issuance and endorses the document to the buyer (the",
+            "  // buyer's transfer grant). The carrier's own authority is over the",
+            "  // issuance event, of which it is performer and controller.",
+            "  BillOfLading isAn Asset with blNumber: String, owner: Seller;",
         ]
     if p.has_nomination:
         L += [
@@ -774,7 +779,7 @@ def emit_declarations(c: RuleConfig) -> list[str]:
         L += ["  carrier: Carrier with name := carrierP.name, org := carrierP.org, dept := carrierP.dept;"]
     L += ["  goods: Goods with description := goodsDesc, quantity := qty, owner := seller;"]
     if p.has_bol:
-        L += ['  billOfLading: BillOfLading with blNumber := "", owner := carrier;']
+        L += ['  billOfLading: BillOfLading with blNumber := "", owner := seller;']
     if p.has_nomination:
         L += [f"  {p.nomination_var}: {p.nomination_event} with dueDate := Date.add(effDate, noticeDays, days), performer := buyer, controller := buyer;"]
     if p.has_schedule_notice:
@@ -1209,10 +1214,14 @@ def emit_acpolicy(c: RuleConfig) -> list[str]:
             rules.append(f"read To carrier On {p.delivery_var} by seller")
         rules += [
             "read To seller On billOfLadingIssued by carrier",
+            # The seller owns the B/L (the carrier issues it to the shipper), so
+            # both billOfLading grants are the owner's: it authorizes the carrier
+            # to inscribe the number at issuance, and...
             "write To carrier On billOfLading.blNumber by seller",
-            # A6 document-of-title: the buyer receives TRANSFER rights over the
+            # ...A6 document-of-title: the buyer receives TRANSFER rights over the
             # bill of lading - the AC ontology's transfer action standing in for
-            # the negotiable document's endorsability (sale in transit).
+            # the negotiable document's endorsability (sale in transit), granted
+            # by the holder as an endorsement is.
             "transfer To buyer On billOfLading by seller",
         ]
     else:  # proof-only rules: buyer reads the delivery event

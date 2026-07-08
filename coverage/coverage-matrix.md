@@ -67,6 +67,19 @@ FAS/any-mode proof-of-delivery vs a bill of lading), see the cross-cutting notes
   the endorsability/document-of-title device A6 was missing (runtime
   enforcement of transfer is the next upstream probe; see
   `symboleoac-improvements.md` O4b).
+- **2026-07-08 L9 resolution (B/L grant authority).** The new upstream L9 lint
+  (permission giver should own/control/perform the resource) flagged that the
+  two `billOfLading` grants (carrier writes `blNumber`; buyer gets `transfer`)
+  were given *by seller* while the asset's declared owner was the *carrier*.
+  Resolved by correcting the **ownership**, not the grants: the carrier issues
+  the B/L *to the shipper* (Hague-Visby art. III(3)), so the seller is the
+  document's owner/holder — it authorizes the carrier's inscription of the
+  number at issuance and endorses the document to the buyer, exactly the two
+  grants. The carrier's own authority is over the *issuance event* (performer/
+  controller; its grant of read-to-seller was already by carrier). The
+  grant-by-carrier alternative was rejected: it would make the carrier the
+  source of the buyer's endorsement rights, which is the holder's act.
+  FOB/CFR/CIF now validate with **zero diagnostics at every tier**.
 - **2026-07-06 Wave 3 (co-evolution probes + modelling).** A1 invoice ×11; A6
   content constraints for the B/L rules (dated-within-period as a temporal
   predicate; negotiable ⇒ full-set as an implication-shaped disjunction); DPU's

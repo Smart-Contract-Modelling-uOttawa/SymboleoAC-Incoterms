@@ -236,6 +236,38 @@ no need for the Application-API:
    `Fulfillment` and `Contract state: SuccessfulTermination` — the on-chain
    mirror of the local scenario suite's happy path.
 
+## 6. Verified: the Phase-1 + Phase-3 stack on-chain (2026-07-08 redeploy)
+
+After Phases 1 and 3 of the iteration plan landed (runtime violation policy,
+Create-until-activated, interval `HappensWithin`; then the executable
+`transfer`/`Revoke`/`all` access-control semantics and a generated transfer
+transaction), **FOB was redeployed as `fob` version 5.0 / sequence 5** on the
+same network and the full authorized path was re-driven from the `peer` CLI —
+this time exercising the new machinery end to end:
+
+- the chaincode container comes up on **Node 22** running
+  **`symboleoac-js-core@1.0.27`** (pulled fresh by the build; the generated
+  `package.json`'s `^1.0.23` range resolves to it) and logs `ACPolicy loaded`;
+- the plain-Admin `init` still returns `{"successful":false,"message":
+  "Unauthorized: Unknown access"}` — the AC layer enforcing itself, unchanged;
+- with seller/buyer/carrier identities enrolled, `init` as the seller and all
+  **twelve** happy-path events (each invoked as the performing party) return
+  `{"successful":true}`, and `getState` reports **`Contract state:
+  SuccessfulTermination`** with every obligation — including the surviving
+  `oPay` — at `Fulfillment`;
+- **new in Phase 3:** the buyer then invokes
+  `transferResource_billOfLading FOB_<id> Buyer BuyCo procurement`, which
+  returns `{"successful":true}` — the runtime checks the buyer's spec-granted
+  `transfer` right and reassigns ownership of the bill of lading. This is the
+  **on-chain execution of the negotiable-document endorsement (A6 /
+  document-of-title)**, previously only a recorded ACPolicy grant.
+
+The invoke/enrollment recipe is the same as §5; the transfer transaction takes
+positional args `(contractId, newOwnerName, newOwnerOrg, newOwnerDept)` rather
+than the `{contractId,event}` JSON the `trigger_*` methods take. The scripted
+run lives at `deploy/` history / the session scratch; a `dept`-carrying role
+and matching `ecert` attributes remain mandatory (§5).
+
 ## Toolchain issues encountered (summary)
 
 | # | Symptom | Root cause | Fix |

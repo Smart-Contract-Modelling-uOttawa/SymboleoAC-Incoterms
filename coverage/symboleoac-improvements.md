@@ -68,11 +68,13 @@ capability confirmed, documentation should say so).
 |----|--------------------|----------|--------|
 | C1 | `createSurvivingObligation_*` references an undeclared `isNewInstance` (crashes every surviving obligation at runtime); a second shape appears when the surviving antecedent is non-trivial. | Was patched in `tests/scenarios/generate.mjs` (`patchCodegen`, two patterns); mentioned in issue #2. **Fixed 2026-07-07** in `Symboleo2SC.xtend` (declaration mirrors `createObligation_*`), on the `claude/phase0-codegen-fixes` branches of SymboleoAC-IDE and SymboleoAC-Web; `patchCodegen` retired. | **fixed** (PR pending) |
 | C2 | **Arithmetic in a consequent** emits a JS `SyntaxError` in the contract class's `LegalSituation` metadata builder (nested, mis-quoted `addConsequentOf` in `rightSide`), while the norm-evaluation condition is generated correctly. The spec compiles 0/0 — only execution catches it. | Filed as SymboleoAC2SC#3; was patched in `patchCodegen`. **Fixed 2026-07-07**: `generateLegalpositionCondition`'s `PArithmetic` case now emits the operand flat (`left op right`) instead of wrapping it in another `addAC(...)` call — an arithmetic node is an operand of the enclosing comparison, not a condition of its own. Same branches as C1; W8 retired with it. | **fixed** (PR pending) |
-| C3 | Roles need a `dept` attribute for the generated `authenticate`; the compiler should add/require it instead of failing opaquely on-chain with "Unauthorized". | Filed as SymboleoAC2SC#1. | filed |
+| C3 | Roles need a `dept` attribute for the generated `authenticate`; the compiler should add/require it instead of failing opaquely on-chain with "Unauthorized". | Filed as SymboleoAC2SC#1. The compile-time side is **closed by validator E6** (merged 2026-07-08; commented on #1): a Role missing name/org/dept is now an error with the exact declaration to add. The conceptual side (O4a: model the certificate-matching contract) stays open. | filed → largely closed by E6 |
 | C4 | **Add a generated-JS self-check** (`node --check` over every emitted file) to the codegen pipeline, so C2-class defects fail the *compile* gate rather than surfacing at deployment. | The 0-error/0-warning gate passed while the generated CIF.js was unparseable. **Implemented 2026-07-07** in `codegen-cli` (SymboleoAC-Web `claude/phase0-codegen-fixes`): failures become ERROR issues (`generated-js-syntax`), non-zero `summary.errors`, exit 1; skipped with a stderr note where `node` is absent (the bridge image ships node). Detection verified live: a jar with C4 but *without* the C2 fix rejected CIF with the exact SyntaxError that previously reached deployment. | **implemented** (PR pending) |
 | C5 | `getState` returns prose, `getLegalPositionStateAndTime` returns JSON — unify on JSON for machine consumption. | On-chain verification had to parse a human-oriented string. | proposed |
 | C6 | Codegen should follow the ontology state machines (see O9/O10) or expose the violation policy as a generation option. | SymboleoAC2SC#2. | filed |
 | C7 | **Extend the Xtext validator with pragmatic well-formedness rules.** The current `SymboleoValidator` (17 active checks) is strong on reference/type consistency but nearly silent on what the codegen, runtime, and blockchain *assume*; two further checks (unique AC-rule names; the permission-giver rule) sit half-written and commented out. See the tiered rule set below. | Five probes against the deployed jar (2026-07-06): an Event with **no `performer`/`controller`** compiles 0/0 and its JS parses, yet every generated trigger transaction dereferences `_controller` for the AC layer — the event is untriggerable on-chain; a domain type `Function` + a variable named `constructor` compile and parse but silently corrupt the contract object (property shadowing); duplicate `Rule1:` names are accepted; a violation-triggered obligation in the *main* section is accepted although the runtime makes it stillborn (the `oFailureCosts` trap). Only the dangling-`obligations.X` probe was correctly rejected (scoping). | proposed |
+
+| C8 | **Codegen NPE on a spec with no `ACPolicy` section**: the section is optional in the grammar and the spec validates clean, but `getDefaultControllerACPolicy` dereferences `Model.getAcpolicys()` (null) and generation crashes before emitting anything (so even C4 cannot catch it). | Found 2026-07-08 probing W13 with minimal specs — the corpus never hits it (all 11 rules declare an ACPolicy). Filed as SymboleoAC2SC#4 with a repro and a suggested empty-policy default. | filed |
 
 **C7 — validation rules, tiered for backward compatibility (expert-reviewed
 2026-07-07).** The LLM's original 12-rule proposal was reviewed with domain
@@ -135,7 +137,13 @@ diagnostics — five of them previously passed validation and failed only at
 runtime or on-chain. Bonus corpus finding from L9: the `billOfLading` grants
 (write `blNumber`; transfer) are given *by seller* although the asset's
 declared owner is the *carrier* — flagged as info; worth an ACPolicy review
-(grant by carrier, or co-controllers).
+(grant by carrier, or co-controllers). **Resolved 2026-07-08** by correcting
+the ownership instead: the B/L is issued *to the shipper* (Hague-Visby art.
+III(3)), so the seller is its owner/holder and both grants are the owner's
+acts (authorizing the issuer's inscription; endorsing to the buyer). See the
+coverage matrix's L9-resolution note for the full rationale — a validator
+lint driving a modelling correction is the co-evolution loop running in the
+reverse direction (stack → corpus).
 
 *Removed on expert review:*
 (4) cross-namespace uniqueness — unnecessary: name resolution is
@@ -169,7 +177,7 @@ at runtime.
 |----|--------------------|----------|--------|
 | T1 | **Role-identity provisioning should be first-class.** The Application-API hard-codes a `fabric-network-2.2.2` layout and macOS paths; we bypassed it with direct `fabric-ca-client` enrollment (attrs as `ecert`, NodeOU config copy) — now documented in `deploy/README.md` §5. | Full authorized on-chain happy path (11 transactions, 3 identities) achieved CLI-only. | proposed |
 | T2 | IDE/bridge lints: warn on roles without `dept` (AC will reject on-chain), and surface the C4 generated-JS check in the Web IDE's Generate flow. | Both failure modes are invisible until deployment today. | proposed |
-| T3 | Test network `network.sh` hard-codes `bin-macos`; Fabric 2.2's `fabric-nodeenv` is Node 12 (crashes on modern syntax). Fix/retag upstream. | deploy/README.md fixes 1 and 4. | proposed |
+| T3 | Test network `network.sh` hard-codes `bin-macos`; Fabric 2.2's `fabric-nodeenv` is Node 12 (crashes on modern syntax). Fix/retag upstream. | deploy/README.md fixes 1 and 4. **Filed 2026-07-08** as SymboleoAC-HyperledgerFabric-Test-Netwrok#1 and #2 (with the workarounds and suggested fixes). | filed |
 
 ---
 

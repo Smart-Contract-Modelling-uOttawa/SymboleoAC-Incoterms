@@ -93,6 +93,27 @@ on-chain "Unauthorized".
 *(Retired 2026-07-07: C2 is fixed, so W8 has no remaining purpose — an
 example of a validator rule whose designed lifetime ends with the defect it
 guards; CIF/CIP return to 0-warning.)*
+(13) **unused definitions** (added on expert request 2026-07-07): a domain
+type, contract parameter, or declared instance that nothing references —
+leftover from an edit, or a sign an intended reference was never written;
+each also has a deployment cost (a generated class, a required
+instantiation argument, an initialized instance). Implementation note: the
+two reference mechanisms differ — variables/parameters are referenced *by
+name string* in dot expressions, domain types by real EMF cross-references
+(declared/attribute/parameter types, `isA` supertypes, enum literals) — so
+the check scans both. The 11-spec corpus is W13-clean (the generator's
+per-rule domain pruning holds), verified by probe.
+
+**Message-quality convention (expert request 2026-07-07):** every validator
+diagnostic (pre-C7 and C7 alike) now states *what* is wrong naming the
+offending element, *why* it matters downstream, and *how* to fix it — the
+consumers are humans **and LLMs in compile-fix loops**. The pass rewrote
+all ~25 pre-C7 messages (among them a garbled one — "should start no
+valuable input a lowercase letter" — and several truncated one-liners) and
+added found-vs-expected types to the function-argument checks. The C4
+generated-JS error now tells the fixing agent explicitly that the *spec is
+not at fault* (it validated clean) so a compile-fix loop reports the
+generator bug instead of mutating the contract.
 *Lints* (completeness/reachability):
 (9) finish the permission-giver check (the `by` role should be owner,
 controller, or performer of the granted resource);
@@ -178,7 +199,8 @@ failures (untriggerable events, shadowed members, opaque on-chain
 > **Phase 0 status (2026-07-07): C7 implemented (expert-reviewed, PRs
 > SymboleoAC-IDE#1 / SymboleoAC-Web#6); C1/C2 fixed and C4 implemented on
 > the stacked `claude/phase0-codegen-fixes` branches; W8 retired with C2;
-> `patchCodegen` retired in this repo.** Verification sequence worth
+> W13 (unused definitions) and the all-messages self-explainability pass
+> added on expert request; `patchCodegen` retired in this repo.** Verification sequence worth
 > reporting: C4 was built *before* the C2 fix and correctly failed the gate
 > on CIF's then-unparseable contract class; after the C2 fix the corpus
 > generates 0-error/0-warning and the full suite passes on unpatched

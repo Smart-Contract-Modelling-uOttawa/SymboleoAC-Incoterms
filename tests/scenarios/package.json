@@ -12,7 +12,7 @@
   "dependencies": {
     "fabric-contract-api": "^2.2.0",
     "flatted": "^3.4.2",
-    "symboleoac-js-core": "github:Smart-Contract-Modelling-uOttawa/SymboleoAC-JS-Core#claude/phase1-runtime-semantics"
+    "symboleoac-js-core": "github:Smart-Contract-Modelling-uOttawa/SymboleoAC-JS-Core#main"
   },
   "devDependencies": {
     "c8": "^11.0.0"

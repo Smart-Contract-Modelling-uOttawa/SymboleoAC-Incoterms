@@ -277,8 +277,9 @@ def _params_tail(term: str, vocab: dict, insurance: bool, buyer_import: bool = F
         tail = f"  {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, {days}, paymentDays: Number"
     else:  # "E": EXW — goods made available at the seller's premises.
         tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number"
-    if insurance:
-        tail += ", insuranceCover: String"
+    # L2: the ICC cover clause is no longer a display-string parameter; the
+    # obtained cover is an Env attribute on InsuranceObtained (coverLevel:
+    # ICCClause) and the rule's minimum is a fixed enum literal in oInsure.
     return tail
 
 
@@ -660,10 +661,12 @@ def emit_domain(c: RuleConfig) -> list[str]:
         ]
     if p.has_insurance:
         L += [
-            "  // A5: seller takes out cargo insurance for the buyer's benefit. The named",
-            "  // clause set (ICC (A)/(C)) stays data (coverLevel); the minimum insured",
-            "  // amount (110% of the price) and the contract currency are checked in oInsure.",
-            "  InsuranceObtained isAn Event with coverLevel: String, Env policyNumber: String, Env insuredAmount: Number, Env insuredCurrency: Currency, performer: Seller, controller: Seller;",
+            "  // A5: seller takes out cargo insurance for the buyer's benefit. The ICC",
+            "  // cover clauses form an ORDERED enumeration (C < B < A: minimum to broadest);",
+            "  // oInsure requires the obtained cover to be at least the rule's minimum, plus",
+            "  // the minimum insured amount (110% of the price) and the contract currency.",
+            "  ICCClause isAn Enumeration(C, B, A);",
+            "  InsuranceObtained isAn Event with Env coverLevel: ICCClause, Env policyNumber: String, Env insuredAmount: Number, Env insuredCurrency: Currency, performer: Seller, controller: Seller;",
             "  // A5: the seller provides the buyer with the policy/certificate or other",
             "  // evidence of the insurance cover.",
             "  InsuranceDocProvided isAn Event with performer: Seller, controller: Seller;",
@@ -808,7 +811,7 @@ def emit_declarations(c: RuleConfig) -> list[str]:
         L += ["  securityComplied: SecurityComplied with performer := seller, controller := seller;"]
     if p.has_insurance:
         L += [
-            "  insuranceObtained: InsuranceObtained with coverLevel := insuranceCover, performer := seller, controller := seller;",
+            "  insuranceObtained: InsuranceObtained with performer := seller, controller := seller;",
             "  insuranceDocProvided: InsuranceDocProvided with performer := seller, controller := seller;",
             "  additionalCoverRequested: AdditionalCoverRequested with performer := buyer, controller := buyer;",
             "  additionalCoverInfoGiven: AdditionalCoverInfoGiven with performer := buyer, controller := buyer;",
@@ -934,13 +937,17 @@ def emit_obligations(c: RuleConfig) -> list[str]:
             f"              or ShappensBefore(insuranceObtained, procuredSoDelivered))"
             if p.has_string_sale else f"ShappensBefore(insuranceObtained, {p.delivery_var})"
         )
+        # L2: the ICC minimum is now a CHECKED ordered-enum constraint, not
+        # data. CIF's floor is ICC(C); CIP's is ICC(A) (Incoterms 2020).
+        min_clause = "A" if "(A)" in p.insurance_cover_phrase else ("B" if "(B)" in p.insurance_cover_phrase else "C")
         L += [
-            f"  // A5: the seller takes out cargo insurance (min. {p.insurance_cover_phrase} - recorded as",
-            "  // data) covering at least 110% of the price, in the contract currency -",
-            "  // both checked as constraints on the insurance event.",
+            f"  // A5: the seller takes out cargo insurance of at least {p.insurance_cover_phrase}",
+            "  // (an ordered-enum minimum, checked), covering at least 110% of the price,",
+            "  // in the contract currency - all three checked on the insurance event.",
             f"  oInsure: O(seller, buyer, true, {before}",
             "              and insuranceObtained.insuredAmount >= 1.1 * price",
-            "              and insuranceObtained.insuredCurrency == curr);",
+            "              and insuranceObtained.insuredCurrency == curr",
+            f"              and insuranceObtained.coverLevel >= ICCClause({min_clause}));",
             "  // A5: the seller provides the buyer with the policy/certificate or other",
             "  // evidence of cover (the buyer may claim directly from the insurer).",
             "  oProvideInsuranceDoc: Happens(insuranceObtained) -> O(seller, buyer, true,",

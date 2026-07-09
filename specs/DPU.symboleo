@@ -71,7 +71,7 @@ endDomain
 Contract DPU (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number
+  placeOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number, assistDays: Number
 )
 
 Declarations
@@ -155,8 +155,12 @@ Obligations
   oTakeDelivery: (Happens(unloadedAtDestination) or Happens(procuredSoDelivered)) -> O(buyer, seller, true, Happens(goodsTakenOver));
   // At the buyer's request, risk and cost, the seller provides assistance with:
   //   - A7(b): import clearance documents and information
+  // The assistance must be provided in time - within assistDays of the
+  // request (L4: the deadline is relative to the request event's occurrence),
+  // so a failure to assist is a violation the B3/B9(d) limb can trigger on.
   oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
-              Happens(assistanceToBuyerProvided));
+              WhappensBefore(assistanceToBuyerProvided,
+                             Date.add(assistanceToBuyerRequested, assistDays, days)));
   // B9: the buyer reimburses all costs of assistance it requested,
   // within reimburseDays of the assistance being provided (L4: the
   // deadline is relative to the assistance event's occurrence).
@@ -166,8 +170,12 @@ Obligations
   // At the seller's request, risk and cost, the buyer provides assistance with:
   //   - B7(a): export/transit clearance documents and information
   //   - B5: information the seller needs for obtaining insurance
+  // The assistance must be provided in time - within assistDays of the
+  // request (L4). For DDP this is the buyer's B7 import-clearance assistance,
+  // whose violation is that rule's B3(a) premature-transfer trigger.
   oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
-              Happens(assistanceToSellerProvided));
+              WhappensBefore(assistanceToSellerProvided,
+                             Date.add(assistanceToSellerRequested, assistDays, days)));
   // A9: the seller reimburses all costs of assistance it requested,
   // within reimburseDays of the assistance being provided (L4: the
   // deadline is relative to the assistance event's occurrence).

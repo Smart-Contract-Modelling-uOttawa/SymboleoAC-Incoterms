@@ -49,7 +49,7 @@ endDomain
 Contract EXW (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDelivery: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number
+  placeOfDelivery: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number, assistDays: Number
 )
 
 Declarations
@@ -103,8 +103,12 @@ Obligations
   //   - A4: transport information incl. security requirements
   //   - A5: insurance information
   //   - A7: export/transit/import clearance documents and information (EXW: all clearance is the buyer's)
+  // The assistance must be provided in time - within assistDays of the
+  // request (L4: the deadline is relative to the request event's occurrence),
+  // so a failure to assist is a violation the B3/B9(d) limb can trigger on.
   oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
-              Happens(assistanceToBuyerProvided));
+              WhappensBefore(assistanceToBuyerProvided,
+                             Date.add(assistanceToBuyerRequested, assistDays, days)));
   // B9: the buyer reimburses all costs of assistance it requested,
   // within reimburseDays of the assistance being provided (L4: the
   // deadline is relative to the assistance event's occurrence).

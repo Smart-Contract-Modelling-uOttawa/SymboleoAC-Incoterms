@@ -272,15 +272,15 @@ def _params_tail(term: str, vocab: dict, insurance: bool, buyer_import: bool = F
     # deadline param -- "within reimburseDays of the assistance provided" -- is
     # universal.
     if term == "F":
-        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number"
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number, assistDays: Number"
     elif term == "C":
-        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number"
+        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number, assistDays: Number"
     elif term == "D":
         # Delivery is at destination; there is no separate origin place param.
         days = "carriageDays: Number, importDays: Number, deliveryDays: Number" if buyer_import else "carriageDays: Number, deliveryDays: Number"
-        tail = f"  {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, {days}, paymentDays: Number, reimburseDays: Number"
+        tail = f"  {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, {days}, paymentDays: Number, reimburseDays: Number, assistDays: Number"
     else:  # "E": EXW — goods made available at the seller's premises.
-        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number"
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number, assistDays: Number"
     # L2: the ICC cover clause is no longer a display-string parameter; the
     # obtained cover is an Env attribute on InsuranceObtained (coverLevel:
     # ICCClause) and the rule's minimum is a fixed enum literal in oInsure.
@@ -1087,8 +1087,12 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         L += ["  // At the buyer's request, risk and cost, the seller provides assistance with:"]
         L += [f"  //   - {t}" for t in p.assist_to_buyer]
         L += [
+            "  // The assistance must be provided in time - within assistDays of the",
+            "  // request (L4: the deadline is relative to the request event's occurrence),",
+            "  // so a failure to assist is a violation the B3/B9(d) limb can trigger on.",
             "  oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,",
-            "              Happens(assistanceToBuyerProvided));",
+            "              WhappensBefore(assistanceToBuyerProvided,",
+            "                             Date.add(assistanceToBuyerRequested, assistDays, days)));",
             "  // B9: the buyer reimburses all costs of assistance it requested,",
             "  // within reimburseDays of the assistance being provided (L4: the",
             "  // deadline is relative to the assistance event's occurrence).",
@@ -1100,8 +1104,12 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         L += ["  // At the seller's request, risk and cost, the buyer provides assistance with:"]
         L += [f"  //   - {t}" for t in p.assist_to_seller]
         L += [
+            "  // The assistance must be provided in time - within assistDays of the",
+            "  // request (L4). For DDP this is the buyer's B7 import-clearance assistance,",
+            "  // whose violation is that rule's B3(a) premature-transfer trigger.",
             "  oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,",
-            "              Happens(assistanceToSellerProvided));",
+            "              WhappensBefore(assistanceToSellerProvided,",
+            "                             Date.add(assistanceToSellerRequested, assistDays, days)));",
             "  // A9: the seller reimburses all costs of assistance it requested,",
             "  // within reimburseDays of the assistance being provided (L4: the",
             "  // deadline is relative to the assistance event's occurrence).",
@@ -1145,6 +1153,10 @@ def emit_surviving(c: RuleConfig) -> list[str]:
             elif t == "notice_violated":
                 parts.append("Happens(Violated(obligations.oNotifySchedule))")
                 why.append("the buyer fails to give the agreed B10 notice in time")
+            elif t == "assist_seller_violated":
+                parts.append("Happens(Violated(obligations.oAssistSeller))")
+                why.append("the buyer fails to give the seller its B7 clearance "
+                           "assistance in time (DDP)")
         trigger = parts[0] if len(parts) == 1 else "(" + " or ".join(parts) + ")"
         L += [
             f"  // B3/B9(d): if {' or '.join(why)},",

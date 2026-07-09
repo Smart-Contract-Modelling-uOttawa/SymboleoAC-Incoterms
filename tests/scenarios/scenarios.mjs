@@ -20,6 +20,10 @@ const NOTICE = 10; const CARRIAGE = 10; const IMPORT = 15; const DELIV = 20; con
 // happy/assistance traces fire provided and reimbursed back-to-back (both
 // "now"), well inside this window; the L4 witness backdates to breach it.
 const REIMB = 30;
+// assistDays (L4): "provide the requested assistance within N days of the
+// request". Makes the assistance obligations violable by deadline, which is
+// what DDP's B3(a) B7-assistance premature-transfer limb triggers on.
+const ASSIST = 15;
 
 const ev = (event, attrs) => ({ event, attrs });
 // A8: checking/packaging/marking precedes delivery in every rule.
@@ -35,7 +39,7 @@ export const RULES = [
   // --- F-terms: buyer nominates; breach = seller misses delivery ---
   {
     code: 'FOB', nominates: 'oNominateVessel',
-    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     happy: [ev('vesselNominated', { loadingPort: ORIGIN }), pack, invoice, ev('securityComplied'),
       ev('exportCleared'), ev('importClearedByBuyer'),
       ev('loadedOnBoard', { port: ORIGIN }), ...withBoLDocs],
@@ -43,7 +47,7 @@ export const RULES = [
   },
   {
     code: 'FAS', nominates: 'oNominateVessel',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     happy: [ev('vesselNominated', { loadingPort: ORIGIN }), pack, invoice, ev('securityComplied'),
       ev('exportCleared'), ev('importClearedByBuyer'),
       ev('deliveredAlongside', { port: ORIGIN }), ...proofDocs],
@@ -51,7 +55,7 @@ export const RULES = [
   },
   {
     code: 'FCA', nominates: 'oNominateCarrier',
-    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, eff, NOTICE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     happy: [ev('carrierNominated', { namedPlace: ORIGIN }), pack, invoice, ev('securityComplied'),
       ev('exportCleared'), ev('importClearedByBuyer'),
       ev('handedToCarrier', { place: ORIGIN }), ...proofDocs],
@@ -60,13 +64,13 @@ export const RULES = [
   // --- C-terms: seller carriage; oDeliver is unconditional (exists at ctor) ---
   {
     code: 'CFR',
-    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('loadedOnBoard'), ...withBoLDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'CIF',
-    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, C, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     // L2: coverLevel is an ordered-enum ordinal (ICCClause C=0,B=1,A=2); CIF's
     // floor is ICC(C), so obtaining ICC(A)=2 satisfies `coverLevel >= ICC(C)`.
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'),
@@ -76,13 +80,13 @@ export const RULES = [
   },
   {
     code: 'CPT',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('handedToFirstCarrier'), ...proofDocs],
     breach: { pre: [ev('exportCleared')], violate: 'oContractCarriage', power: 'pTerminateNoCarriage' },
   },
   {
     code: 'CIP',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, ...GOODS, ORIGIN, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     // L2: CIP's floor is ICC(A) (Incoterms 2020 raised it), so the seller must
     // obtain exactly ICC(A)=2 to satisfy `coverLevel >= ICC(A)`.
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'),
@@ -93,26 +97,26 @@ export const RULES = [
   // --- D-terms: seller carriage + delivery at destination ---
   {
     code: 'DAP',
-    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('madeAvailable'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'DPU',
-    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importClearedByBuyer'), ev('arrivedAtDestination'), ev('unloadedAtDestination'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },
   {
     code: 'DDP',
-    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, ...GOODS, DEST, eff, NOTICE, CARRIAGE, DELIV, PAY, REIMB, ASSIST],
     happy: [pack, invoice, ev('securityComplied'), ev('exportCleared'), ev('carriageContracted'), ev('importCleared'), ev('madeAvailable'), ...proofDocs],
     breach: { pre: [ev('exportCleared'), ev('carriageContracted')], violate: 'oImportClearance', power: 'pTerminateNoImportClearance' },
   },
   // --- E-term: minimum seller obligation ---
   {
     code: 'EXW',
-    ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, IMPORT, DELIV, PAY, REIMB],
+    ctor: (eff) => [S, B, ...GOODS, ORIGIN, eff, NOTICE, IMPORT, DELIV, PAY, REIMB, ASSIST],
     happy: [pack, invoice, ev('clearedByBuyer'), ev('goodsMadeAvailable'), ev('deliveryNoticeGiven'), ev('goodsTakenOver'), ev('paid')],
     breach: { pre: [], violate: 'oDeliver', power: 'pTerminateByBuyer' },
   },

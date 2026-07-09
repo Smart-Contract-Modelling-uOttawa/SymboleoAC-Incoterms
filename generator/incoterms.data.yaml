@@ -47,8 +47,13 @@ cost_stages:
 #                              (ScheduleRightAgreed), fails to give the agreed
 #                              B10 notice in time (oNotifySchedule violated).
 #                              For the F-terms the nomination IS the B10 notice.
-# DDP's B3(a) B7-assistance limb remains unmodelled (assistance obligations
-# have no deadline to violate); see coverage/coverage-matrix.md.
+#   assist_seller_violated    DDP B3(a): the buyer fails to give the seller its
+#                              B7 import-clearance assistance in time. The
+#                              assistance obligations are now deadline-bound
+#                              (WhappensBefore ... Date.add(request, assistDays,
+#                              days), L4), so this limb is modelled -- every
+#                              premature-transfer limb of the standard is now
+#                              first-class; see coverage/coverage-matrix.md.
 #
 # assistance - the ICC request-triggered assistance pattern ("at the
 # requester's request, risk and cost", recurring in A4/A5/A6/A7(b), B5 and
@@ -159,7 +164,7 @@ rules:
     export_clearance: seller
     import_clearance: seller
     cost: [S,S,S,S,S,S,S,S,S,S,S,S,B]
-    b3_triggers: [notice_violated]   # B7-assistance limb still unmodelled (no deadline to violate)
+    b3_triggers: [assist_seller_violated, notice_violated]   # B3(a): buyer's B7 import-assistance failure (deadline-bound via L4) + B10 notice
     assistance:
       to_buyer: []
       to_seller:

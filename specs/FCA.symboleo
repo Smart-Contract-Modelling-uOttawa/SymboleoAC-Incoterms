@@ -79,7 +79,7 @@ endDomain
 Contract FCA (
   sellerP: Seller, buyerP: Buyer, carrierP: Carrier,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDelivery: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
+  placeOfDelivery: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number
 )
 
 Declarations
@@ -167,16 +167,22 @@ Obligations
   //   - A7(b): transit/import clearance documents and information
   oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
               Happens(assistanceToBuyerProvided));
-  // B9: the buyer reimburses all costs of assistance it requested.
+  // B9: the buyer reimburses all costs of assistance it requested,
+  // within reimburseDays of the assistance being provided (L4: the
+  // deadline is relative to the assistance event's occurrence).
   oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,
-              Happens(assistanceToBuyerReimbursed));
+              WhappensBefore(assistanceToBuyerReimbursed,
+                             Date.add(assistanceToBuyerProvided, reimburseDays, days)));
   // At the seller's request, risk and cost, the buyer provides assistance with:
   //   - B7(a): export clearance documents and information
   oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
               Happens(assistanceToSellerProvided));
-  // A9: the seller reimburses all costs of assistance it requested.
+  // A9: the seller reimburses all costs of assistance it requested,
+  // within reimburseDays of the assistance being provided (L4: the
+  // deadline is relative to the assistance event's occurrence).
   oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,
-              Happens(assistanceToSellerReimbursed));
+              WhappensBefore(assistanceToSellerReimbursed,
+                             Date.add(assistanceToSellerProvided, reimburseDays, days)));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered to the carrier and evidenced

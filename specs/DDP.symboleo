@@ -61,7 +61,7 @@ endDomain
 Contract DDP (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, deliveryDays: Number, paymentDays: Number
+  placeOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number
 )
 
 Declarations
@@ -139,9 +139,12 @@ Obligations
   //   - B5: information the seller needs for obtaining insurance
   oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
               Happens(assistanceToSellerProvided));
-  // A9: the seller reimburses all costs of assistance it requested.
+  // A9: the seller reimburses all costs of assistance it requested,
+  // within reimburseDays of the assistance being provided (L4: the
+  // deadline is relative to the assistance event's occurrence).
   oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,
-              Happens(assistanceToSellerReimbursed));
+              WhappensBefore(assistanceToSellerReimbursed,
+                             Date.add(assistanceToSellerProvided, reimburseDays, days)));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered at the destination and evidenced

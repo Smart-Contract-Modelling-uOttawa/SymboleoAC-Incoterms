@@ -61,7 +61,7 @@ endDomain
 Contract DDP (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number
+  placeOfDestination: String, effDate: Date, noticeDays: Number, carriageDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number, assistDays: Number
 )
 
 Declarations
@@ -137,8 +137,12 @@ Obligations
   // At the seller's request, risk and cost, the buyer provides assistance with:
   //   - B7: clearance documents and information for the seller's export/transit/import formalities
   //   - B5: information the seller needs for obtaining insurance
+  // The assistance must be provided in time - within assistDays of the
+  // request (L4). For DDP this is the buyer's B7 import-clearance assistance,
+  // whose violation is that rule's B3(a) premature-transfer trigger.
   oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,
-              Happens(assistanceToSellerProvided));
+              WhappensBefore(assistanceToSellerProvided,
+                             Date.add(assistanceToSellerRequested, assistDays, days)));
   // A9: the seller reimburses all costs of assistance it requested,
   // within reimburseDays of the assistance being provided (L4: the
   // deadline is relative to the assistance event's occurrence).
@@ -151,13 +155,13 @@ Surviving Obligations
   // by the usual proof of delivery; this survives termination of the contract.
   oPay: ((Happens(madeAvailable) or Happens(procuredSoDelivered)) and Happens(documentsProvided)) -> Obligation(buyer, seller, true,
               WhappensBefore(paid, paid.payDueDate) and paid.amount == price);
-  // B3/B9(d): if the buyer fails to give the agreed B10 notice in time,
+  // B3/B9(d): if the buyer fails to give the seller its B7 clearance assistance in time (DDP) or the buyer fails to give the agreed B10 notice in time,
   // the buyer bears the resulting additional costs - the rules' premature
   // risk/cost transfer, guarded by the ICC proviso that the goods have been
   // clearly identified as the contract goods. A surviving obligation: like
   // the payment above, it outlives termination caused by the very failure
   // that triggered it.
-  oFailureCosts: Happens(Violated(obligations.oNotifySchedule)) ->
+  oFailureCosts: (Happens(Violated(obligations.oAssistSeller)) or Happens(Violated(obligations.oNotifySchedule))) ->
               Obligation(buyer, seller, Happens(goodsIdentified), Happens(additionalCostsPaid));
 
 Powers

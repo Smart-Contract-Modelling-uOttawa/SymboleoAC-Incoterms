@@ -64,6 +64,10 @@ const FAILURES = [
   { code: 'DAP', pre: [], violate: 'oImportClearanceBuyer' },
   { code: 'DPU', pre: [], violate: 'oImportClearanceBuyer' },
   { code: 'EXW', pre: [{ event: 'goodsMadeAvailable' }], violate: 'oTakeDelivery' },
+  // DDP B3(a): the buyer fails to give the seller its B7 import-clearance
+  // assistance in time. The assistance is requested (creating oAssistSeller),
+  // then that obligation is violated -> premature risk/cost transfer.
+  { code: 'DDP', pre: [{ event: 'assistanceToSellerRequested', attrs: { topic: 'B7 import clearance' } }], violate: 'oAssistSeller' },
   // B10-notice limb (non-F rules): the buyer was given the right to determine
   // the delivery schedule, then failed to give the agreed notice in time.
   ...['EXW', 'CPT', 'CIP', 'CFR', 'CIF', 'DAP', 'DPU', 'DDP'].map((code) => (

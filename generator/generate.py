@@ -267,16 +267,20 @@ def _params_tail(term: str, vocab: dict, insurance: bool, buyer_import: bool = F
     # importDays: deadline of the buyer's clearance obligation (all rules whose
     # import clearance the ICC table assigns to the buyer; for EXW it bounds
     # the buyer's full export/transit/import clearance).
+    # reimburseDays (L4): every rule has at least one assistance channel
+    # (to-buyer except DDP, to-seller except EXW), so the reimbursement
+    # deadline param -- "within reimburseDays of the assistance provided" -- is
+    # universal.
     if term == "F":
-        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number"
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number"
     elif term == "C":
-        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number"
+        tail = f"  {vocab['origin_param']}: String, {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, carriageDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number"
     elif term == "D":
         # Delivery is at destination; there is no separate origin place param.
         days = "carriageDays: Number, importDays: Number, deliveryDays: Number" if buyer_import else "carriageDays: Number, deliveryDays: Number"
-        tail = f"  {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, {days}, paymentDays: Number"
+        tail = f"  {vocab['dest_param']}: String, effDate: Date, noticeDays: Number, {days}, paymentDays: Number, reimburseDays: Number"
     else:  # "E": EXW — goods made available at the seller's premises.
-        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number"
+        tail = f"  {vocab['origin_param']}: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number"
     # L2: the ICC cover clause is no longer a display-string parameter; the
     # obtained cover is an Env attribute on InsuranceObtained (coverLevel:
     # ICCClause) and the rule's minimum is a fixed enum literal in oInsure.
@@ -1085,9 +1089,12 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         L += [
             "  oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,",
             "              Happens(assistanceToBuyerProvided));",
-            "  // B9: the buyer reimburses all costs of assistance it requested.",
+            "  // B9: the buyer reimburses all costs of assistance it requested,",
+            "  // within reimburseDays of the assistance being provided (L4: the",
+            "  // deadline is relative to the assistance event's occurrence).",
             "  oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,",
-            "              Happens(assistanceToBuyerReimbursed));",
+            "              WhappensBefore(assistanceToBuyerReimbursed,",
+            "                             Date.add(assistanceToBuyerProvided, reimburseDays, days)));",
         ]
     if p.assist_to_seller:
         L += ["  // At the seller's request, risk and cost, the buyer provides assistance with:"]
@@ -1095,9 +1102,12 @@ def emit_obligations(c: RuleConfig) -> list[str]:
         L += [
             "  oAssistSeller: Happens(assistanceToSellerRequested) -> O(buyer, seller, true,",
             "              Happens(assistanceToSellerProvided));",
-            "  // A9: the seller reimburses all costs of assistance it requested.",
+            "  // A9: the seller reimburses all costs of assistance it requested,",
+            "  // within reimburseDays of the assistance being provided (L4: the",
+            "  // deadline is relative to the assistance event's occurrence).",
             "  oReimburseBuyerAssist: Happens(assistanceToSellerProvided) -> O(seller, buyer, true,",
-            "              Happens(assistanceToSellerReimbursed));",
+            "              WhappensBefore(assistanceToSellerReimbursed,",
+            "                             Date.add(assistanceToSellerProvided, reimburseDays, days)));",
         ]
     return L
 

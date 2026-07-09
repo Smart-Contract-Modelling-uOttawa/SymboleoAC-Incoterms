@@ -49,7 +49,7 @@ endDomain
 Contract EXW (
   sellerP: Seller, buyerP: Buyer,
   goodsDesc: String, qty: Number, price: Number, curr: Currency,
-  placeOfDelivery: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number
+  placeOfDelivery: String, effDate: Date, noticeDays: Number, importDays: Number, deliveryDays: Number, paymentDays: Number, reimburseDays: Number
 )
 
 Declarations
@@ -105,9 +105,12 @@ Obligations
   //   - A7: export/transit/import clearance documents and information (EXW: all clearance is the buyer's)
   oAssistBuyer: Happens(assistanceToBuyerRequested) -> O(seller, buyer, true,
               Happens(assistanceToBuyerProvided));
-  // B9: the buyer reimburses all costs of assistance it requested.
+  // B9: the buyer reimburses all costs of assistance it requested,
+  // within reimburseDays of the assistance being provided (L4: the
+  // deadline is relative to the assistance event's occurrence).
   oReimburseSellerAssist: Happens(assistanceToBuyerProvided) -> O(buyer, seller, true,
-              Happens(assistanceToBuyerReimbursed));
+              WhappensBefore(assistanceToBuyerReimbursed,
+                             Date.add(assistanceToBuyerProvided, reimburseDays, days)));
 
 Surviving Obligations
   // B1: the buyer must pay the price for goods delivered at the seller's premises and evidenced

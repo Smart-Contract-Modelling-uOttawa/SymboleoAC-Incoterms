@@ -8,6 +8,14 @@ one turn of the co-evolution loop between the language stack and the contract
 corpus (the KONTEX story: the corpus is both the *consumer* of the stack and its
 *regression benchmark*).
 
+**Catalogue size (updated 2026-07-10): 37 items** — Ontology 13 (O1–O10, with
+O4 split into O4a–O4d), Language 7 (L1–L7), Compiler 8 (C1–C8), Runtime 5
+(R1–R5), Tooling 4 (T1–T4). The initial assessment (Wave 3) produced 30; the
+co-evolution loop then added C8 (codegen NPE on a missing ACPolicy), R5
+(minute-truncated timestamps), and T4 (js-core package hygiene), and split O4
+into O4a–O4d. Any smaller figure in older prose (e.g. "27") predates these
+additions and is superseded by this breakdown.
+
 Layers, as deployed:
 `ontology (SymboleoAC-JS-Core/ontology/SymboleoAC.ump — the Symboleo core + the Access Control extension)` →
 `grammar + compiler (SymboleoAC2SC, Xtext)` → `runtime (symboleoac-js-core)` →
@@ -186,8 +194,8 @@ at runtime.
 ## 6. Iteration plan (one co-evolution turn, reportable in the KONTEX paper)
 
 Ordered by leverage-per-effort; each phase ends by **re-running this corpus**
-(compile gate → 147 scenario/structural tests → Fabric redeploy) as the
-regression benchmark, and re-scoring the coverage matrix. Expected matrix
+(compile gate → scenario/structural tests, 159 as of 2026-07-10 → Fabric
+redeploy) as the regression benchmark, and re-scoring the coverage matrix. Expected matrix
 movement is stated per phase — that is the measurable "one iteration" claim.
 
 **Phase 0 — hygiene + static analysis (days; SymboleoAC-IDE/2SC + test network).**
@@ -294,6 +302,6 @@ O1 risk, O2 cost algebra, L3 defeasibility, L6 vague standards.
 qualifiers) — the honest frontier.
 
 **Benchmark protocol per phase:** regenerate the 11 specs → 0/0 compile →
-147 tests green → power-instance census (currently 48/48) → coverage matrix
+scenario tests green (159 as of 2026-07-10) → power-instance census (48/48) → coverage matrix
 re-score (the diff is the phase's measured outcome) → FOB Fabric redeploy for
 phases touching codegen/runtime.

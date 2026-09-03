@@ -44,7 +44,6 @@ specs/         the 11 SymboleoAC contracts + specs/common (shared ontology)
 generator/     table-driven emitter: ICC allocation tables → .symboleo
 coverage/      A1–A10 / B1–B10 × 11-rules support matrix
 tests/         compile gate, structural checks, execution scenarios
-paper/         the paper (source, figures, tables)
 ```
 
 ## Reading order

@@ -143,55 +143,7 @@ suggested keys `b3_triggers`, `transit_clearance`, `assistance`,
     contract of carriage" heads: conditions referencing *another contract's*
     terms — a genuine expressiveness finding to name in the matrix.
 
-## 3. Paper-only material (non-normative, for §2/§5/§7)
-
-- **The exclusion list (ICC Intro)**: the rules deliberately do NOT deal with
-  transfer of property/title, payment time/place/method/currency, remedies for
-  breach, force majeure, dispute resolution. Consequence for the paper: the
-  SymboleoAC breach powers, payment deadlines, and termination logic are
-  *extensions beyond* Incoterms (contract-of-sale material), not coverage of it.
-  This reframing should be explicit — it also explains why B1 ✅ needs a footnote
-  (price/timing come from the sale contract, not the rule).
-- **Named-place semantics per family**: non-C rules — named place = delivery =
-  risk point; D rules — delivery AND destination coincide; C rules — named place
-  is destination ONLY, never the delivery point (two place parameters needed).
-  A structural invariant worth stating (and asserting differentially).
-- **A2 delivery as the single pivot** for risk (A3) and costs (A9) — matches the
-  specs' design; state it as an invariant.
-- **First-carrier default + residual A4 liability (C rules)**: with no agreed
-  point, risk passes on handover to the *first* carrier; buyer's protection is
-  the seller's surviving A4 duty (carriage contract must reach the destination) —
-  parallels the payment-survives-termination encoding.
-- **FCA/FOB: the relevant carrier is the buyer's nominee** — handover to the
-  seller's own haulier/feeder does not transfer risk; the delivery event must be
-  typed as handover-to-buyer's-nominee.
-- **VGM (SOLAS container weighing)**: the ICC Drafting Group *deliberately*
-  declined to allocate it — a documented, intentional gap in the source standard
-  itself; strengthens the coverage-yardstick narrative.
-- **EXW loading-risk ambiguity**: the ICC notes admit that when the seller loads
-  in fact, risk incidence is arguable — source-text indeterminacy a formal model
-  must resolve by choice; excellent discussion material.
-- **Custom/usualness standards** ("usual terms", "usual route", "customary
-  manner", "in the manner customary at the port", "sufficient notice") — the
-  known vague-qualifier limit; now with a fuller catalogue of instances.
-- **Electronic-document parity (A1, 2020's generalized clause)** — a free win for
-  the smart-contract/Fabric deployment story: the standard itself is
-  mode-neutral about document form.
-- **Horizontal presentation**: ICC 2020 publishes the rules per-article across
-  all 11 rules for the first time — a direct precedent for the generator +
-  coverage-matrix approach; cite it as methodological alignment.
-- **Network of contracts**: carrier/insurer/bank are not bound by the sale
-  contract — frames third parties as environment roles and motivates the
-  AC-policy design (and the FCA B/L mechanism as the sale contract *steering*
-  the carriage contract).
-- **Explanatory notes vs. rules**: the Introduction and Explanatory Notes are
-  expressly NOT part of the rules — the coverage matrix should key only on the
-  A/B article text (methodological caveat).
-- **ICC steering advice** (avoid EXW/DDP extremes, container caveats for
-  FAS/FOB, local-insurance caveat for CIP/CIF) — rule-*selection* guidance is
-  outside any single contract's formalization; worth one paragraph.
-
-## 4. Wave plan and status
+## 3. Wave plan and status
 
 - **Wave 0 (DONE, PR #2):** matrix B8 row fixed; phantom-device cells re-scored
   with the new ⬜ mark; wrong "—" cells fixed; powers claim corrected.
@@ -216,5 +168,4 @@ suggested keys `b3_triggers`, `transit_clearance`, `assistance`,
 - **Remaining (modelling roadmap, no language obstacle):** FCA's two delivery
   modes as distinct events; per-article (rather than consolidated) assistance
   obligations. **Blocked on language/tooling evolution:** see the improvement
-  catalogue + iteration plan in `symboleoac-improvements.md` (the KONTEX
-  co-evolution artifact).
+  catalogue + iteration plan in `symboleoac-improvements.md`.

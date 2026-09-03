@@ -4,7 +4,7 @@ This document is the plan of record for the project and the paper. It defines
 (1) how the 11 specs are generated consistently, (2) how coverage is analyzed,
 and (3) how the specs are validated.
 
-## 0. Thesis of the paper
+## 0. Overview and main idea
 
 SymboleoAC can express the **normative core** of Incoterms 2020 — the
 obligations/powers lifecycle, the delivery↔payment↔risk sequencing, breach
@@ -46,9 +46,7 @@ itself provides the data as two tables (reproduced in `generator/incoterms.data.
    coverage claims and differential tests.
 
 > Bootstrapping: FOB is hand-written and **compiles clean** (`specs/FOB.symboleo`).
-> It is the reference the templates are factored out of. Recommended order to
-> generalize: FOB → FAS → CFR → CIF (sea family), then FCA → CPT → CIP, then the
-> D-family (DAP/DPU/DDP), then EXW.
+> It is the reference the templates are factored out of. 
 
 ## 2. Coverage analysis
 
@@ -57,7 +55,7 @@ of the Incoterms article structure, columns = the 11 rules, cell ∈
 {✅ expressible, ◐ partial, ❌ not expressible}, each with a short rationale and
 a pointer to the modelling device used (or the gap).
 
-Known gaps to foreground (the honest part of the paper):
+Known gaps to foreground:
 
 - **Risk transfer (A3/B3)** — no first-class *risk* in SymboleoAC. Modelled
   indirectly: the delivery event triggers the payment obligation and the payment
@@ -74,15 +72,15 @@ Known gaps to foreground (the honest part of the paper):
 - **Notices (A10/B10)** — "sufficient/customary notice" approximated by temporal
   predicates (`WhappensBefore`, deadlines); the vague qualifier is lost.
 
-Strengths to sell: obligation/power lifecycle, sequencing via
+Strengths: obligation/power lifecycle, sequencing via
 `Happens/ShappensBefore/WhappensBefore/HappensWithin`, breach→suspend/resume/
 terminate, and the **AC policy** (read/write/all/transfer permissions over
-resources) — a differentiator over plain Symboleo.
+resources) -- a differentiator over plain Symboleo.
 
 ## 3. Validation strategy (layered)
 
 1. **Static (CI gate).** Every `specs/*.symboleo` compiles with **0 errors**
-   using the SymboleoAC compiler (`codegen-cli`, see CLAUDE.md). Also check the
+   using the SymboleoAC compiler (`codegen-cli`). Also check the
    formatter is idempotent.
 2. **Structural.** A script over the compiler's `--model` JSON asserts each spec
    contains the norms its coverage row requires and that all cross-references
@@ -100,23 +98,3 @@ resources) — a differentiator over plain Symboleo.
    destination. These catch generation drift.
 5. **Legal/expert review.** Qualitative traceability from each modelled norm back
    to the ICC article text; recorded in the coverage matrix.
-
-## 4. Paper outline (working)
-
-1. Introduction — smart legal contracts, Incoterms, why a standard is a good
-   coverage yardstick.
-2. Background — SymboleoAC (norms, powers, AC policy), Incoterms 2020 structure.
-3. Method — shared ontology + templates + table-driven generation.
-4. The 11 specifications — walkthrough of representative rules (EXW, FOB, CIF, DDP).
-5. Coverage analysis — the matrix + discussion of gaps.
-6. Validation — static/structural/scenario/differential results.
-7. Discussion — what a normative DSL can and cannot capture of a trade standard;
-   proposed language extensions (risk, cost).
-8. Related work, Conclusion.
-
-## 5. Open decisions (revisit early)
-
-- Paper format: LaTeX vs. Markdown-first.
-- Whether to add optional roles (Insurer, Customs authority) to the shared
-  ontology now or per-rule.
-- How far to push cost modelling (data-only vs. per-stage payment obligations).

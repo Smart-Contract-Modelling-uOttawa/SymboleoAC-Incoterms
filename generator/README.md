@@ -5,7 +5,7 @@ Emits `specs/<CODE>.symboleo` for each Incoterms rule from:
 - `incoterms.data.yaml` — the ICC cost/risk allocation tables (source of truth), and
 - a library of **norm templates** (factored out of `specs/FOB.symboleo`).
 
-Goal: 11 **structurally parallel** specs so coverage claims and differential
+Goal: 11 **structurally parallel/aligned** specs so coverage claims and differential
 tests are apples-to-apples.
 
 ## Status & usage
@@ -30,7 +30,7 @@ sync with the generator (STRATEGY ground rule 2). The shared ontology + norm
 templates live inline in `generate.py` as the section emitters (`emit_*`) — see
 `specs/common/README.md` for why "shared" means *inlined into each spec*.
 
-## Design (to implement in the spawned session)
+## Design
 
 1. **Templates.** Extract from FOB into parameterizable fragments:
    - domain: `Seller`, `Buyer`, `Carrier`, `Insurer?`, `Goods`, `BillOfLading`,

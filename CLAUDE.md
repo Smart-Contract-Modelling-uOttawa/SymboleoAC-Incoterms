@@ -26,9 +26,6 @@ coverage analysis and validation, backing a paper. Read `STRATEGY.md` first.
 - `deploy/README.md` — **verified** Hyperledger Fabric deployment guide (FOB was
   deployed on-chain and its access-control policy enforced); records the toolchain
   fixes. `deploy/issue-symboleoac2sc-dept.md` → filed as SymboleoAC2SC#1.
-- `paper/` — the JURIX 2026 draft. **LOCAL ONLY — deliberately NOT committed**
-  (git-excluded via the common-dir `.git/info/exclude`). Builds with
-  `tectonic main.tex`. Do not `git add` it.
 
 CI jobs: `compile` (remote gate), `regen-check` (`generate.py --check`),
 `scenarios` (`node --test`). Keep all three green.
@@ -108,8 +105,7 @@ Domain / Rules / Policy views.
 3. Record every coverage finding in `coverage/coverage-matrix.md` as you go
    (with the modelling device or the gap + rationale).
 4. Prefer verifying with a compile/scenario run over reasoning about the grammar.
-5. **Never `git add` `paper/`** — the JURIX draft is deliberately local-only.
-6. The two upstream codegen bugs this repo used to patch around (undeclared
+5. The two upstream codegen bugs this repo used to patch around (undeclared
    `isNewInstance` in `createSurvivingObligation_*`; arithmetic-in-consequent
    metadata SyntaxError, SymboleoAC2SC#3) are **fixed in the generator**
    (SymboleoAC-IDE / SymboleoAC-Web `claude/phase0-codegen-fixes`), and the
